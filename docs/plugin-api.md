@@ -35,7 +35,7 @@ deeper paths — open an issue if you need something that isn't exposed in
 `vibeguard.api`.
 
 `PLUGIN_API_VERSION` is a `"MAJOR.MINOR"` string. Plugins should pin a
-range in their dependency metadata, e.g. `vibeguard-gate >=0.6,<0.7`,
+range in their dependency metadata, e.g. `vibeguard-gate >=0.7,<1.0`,
 until VibeGuard adopts a richer compatibility contract.
 
 ## Rule contract

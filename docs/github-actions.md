@@ -37,7 +37,7 @@ jobs:
 Or using the first-party action:
 
 ```yaml
-      - uses: dgenio/vibeguard@v0.2
+      - uses: dgenio/vibeguard@v0.7
         with:
           diff: 'true'
           fail-on: high

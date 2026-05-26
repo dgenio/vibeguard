@@ -1,7 +1,5 @@
 ## VibeGuard Scan Results
 
-**Health score:** `61/100` (C)
-
 **5 finding(s)** — ℹ️ **info**: 1 | 🔵 **low**: 1 | 🟡 **medium**: 1 | 🔴 **high**: 1 | 💀 **critical**: 1
 
 | Severity | Rule | Path | Title |
@@ -19,7 +17,6 @@
 **Path:** `src/config.py:9`  
 **Severity:** critical  
 **Confidence:** high  
-**Fingerprint:** `d1b5d6bf08a4`  
 
 A likely AWS Access Key ID was found in `src/config.py` at line 9. Committed secrets can be exploited by anyone with repo access.
 
@@ -34,7 +31,6 @@ AWS_KEY = "AKIA****LE"
 **Path:** `dist/app.js.map`  
 **Severity:** high  
 **Confidence:** high  
-**Fingerprint:** `e377a5a0489a`  
 
 Source map `dist/app.js.map` is in a publish directory. Source maps reveal original source code if shipped to production.
 
@@ -45,7 +41,6 @@ Source map `dist/app.js.map` is in a publish directory. Source maps reveal origi
 **Path:** `src/server.js:24`  
 **Severity:** medium  
 **Confidence:** medium  
-**Fingerprint:** `57797c66d592`  
 
 `src/server.js` line 24 touches a risk-sensitive area (eval/exec). This is not a confirmed vulnerability — human review is recommended.
 
@@ -60,7 +55,6 @@ const value = eval(userInput);
 **Path:** `src/auth.py`  
 **Severity:** low  
 **Confidence:** medium  
-**Fingerprint:** `1d12aa99b83f`  
 
 3 source file(s) changed but no test files were modified. Changed files include: `src/auth.py`, `src/server.py`, `src/db.py`
 
@@ -71,7 +65,6 @@ const value = eval(userInput);
 **Path:** `src/utils.js:1`  
 **Severity:** info  
 **Confidence:** medium  
-**Fingerprint:** `410d4d6b1101`  
 
 `src/utils.js` line 1 contains a comment marking the file as AI-generated. Useful as provenance; informational only.
 

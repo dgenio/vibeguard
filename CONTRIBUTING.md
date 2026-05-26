@@ -189,11 +189,10 @@ If you're adding a brand-new detection rule, the high-level steps are:
    `examples/vulnerable-node-package` or `examples/vulnerable-python-package`
    so `make demo` exercises the new rule.
 
-The detailed walkthrough (with a worked example) will live in
-[`docs/how-to-add-a-rule.md`](docs/how-to-add-a-rule.md) once PR #74
-lands. Until then, the steps above plus an existing rule module
-(`vibeguard/rules/secrets.py` is a good model) are enough to get a
-working rule.
+The detailed walkthrough (with a worked example) lives in
+[`docs/how-to-add-a-rule.md`](docs/how-to-add-a-rule.md). The steps above
+plus an existing rule module (`vibeguard/rules/secrets.py` is a good
+model) are enough to get a working rule.
 
 ---
 

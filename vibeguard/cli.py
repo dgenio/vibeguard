@@ -2,35 +2,27 @@
 
 from __future__ import annotations
 
+import contextlib
 import platform
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated, Any
 
 import typer
 from pydantic import ValidationError
 from rich.console import Console
 
 from vibeguard import __version__
-from vibeguard.config import (
-    DEFAULT_CONFIG_YAML,
-    VibeGuardConfig,
-    apply_policy_suppressions,
-    apply_severity_overrides,
-)
+from vibeguard.config import DEFAULT_CONFIG_YAML, VibeGuardConfig
 from vibeguard.git import get_git_metadata
 from vibeguard.models import Severity
-from vibeguard.publish import run_publish_check
-from vibeguard.reporters.annotations import emit_annotations, is_github_actions
+from vibeguard.reporters.annotations import render_annotations
 from vibeguard.reporters.console import render_findings
-from vibeguard.reporters.diagnostics import print_diagnostics
+from vibeguard.reporters.diagnostics import render_diagnostics
 from vibeguard.reporters.json_reporter import print_json
 from vibeguard.reporters.markdown import render_markdown, render_pr_comment
-from vibeguard.reporters.sarif import print_sarif
+from vibeguard.reporters.sarif import render_sarif
 from vibeguard.scanner import run_scan
-
-if TYPE_CHECKING:
-    from vibeguard.models import Finding, ScanResult
 
 app = typer.Typer(
     name="vibeguard",
@@ -147,31 +139,16 @@ def validate(
 def _validate_output_options(
     json_output: bool,
     markdown_output: bool,
-    sarif_output: bool = False,
-    pr_comment_output: bool = False,
-    diagnostics_output: bool = False,
-    annotations_explicit: bool = False,
+    pr_comment: bool = False,
+    sarif: bool = False,
+    annotations: bool = False,
+    diagnostics: bool = False,
 ) -> None:
-    """Fail fast if mutually exclusive output options are set together."""
-    selected = sum(
-        [json_output, markdown_output, sarif_output, pr_comment_output, diagnostics_output]
-    )
-    if selected > 1:
+    """Fail fast if mutually exclusive output options are both set."""
+    count = sum([json_output, markdown_output, pr_comment, sarif, annotations, diagnostics])
+    if count > 1:
         err_console.print(
-            "[red]Error: --json, --markdown, --sarif, --pr-comment, and --diagnostics are"
-            " mutually exclusive. Choose one.[/]"
-        )
-        raise typer.Exit(2)
-    if annotations_explicit and selected >= 1:
-        # Annotations are workflow commands printed to stdout. Combining them
-        # with structured output (JSON/SARIF/Markdown/diagnostics) interleaves
-        # them into the report and breaks downstream parsers. Annotations
-        # still auto-enable in GitHub Actions when no structured output is
-        # selected.
-        err_console.print(
-            "[red]Error: --annotations cannot be combined with --json, --markdown,"
-            " --sarif, --pr-comment, or --diagnostics (annotations would corrupt"
-            " the structured output).[/]"
+            "[red]Error: output format options are mutually exclusive. Choose one.[/]"
         )
         raise typer.Exit(2)
 
@@ -200,37 +177,27 @@ def scan(
     ] = False,
     sarif_output: Annotated[
         bool,
-        typer.Option("--sarif", help="Output findings as SARIF 2.1.0 JSON"),
+        typer.Option("--sarif", help="Output findings as SARIF"),
     ] = False,
-    pr_comment_output: Annotated[
+    annotations_output: Annotated[
         bool,
-        typer.Option("--pr-comment", help="Output PR-optimized Markdown comment"),
+        typer.Option("--annotations", help="Output as GitHub Actions annotations"),
     ] = False,
     diagnostics_output: Annotated[
         bool,
-        typer.Option(
-            "--diagnostics",
-            help="Output a stable JSON diagnostics array for IDE / editor integrations",
-        ),
+        typer.Option("--diagnostics", help="Output as diagnostics JSON array"),
     ] = False,
-    annotations: Annotated[
-        bool | None,
-        typer.Option(
-            "--annotations/--no-annotations",
-            help="Emit GitHub Actions annotations (auto-enabled in CI)",
-        ),
-    ] = None,
-    baseline_path: Annotated[
-        Path | None,
-        typer.Option("--baseline", help="Path to baseline file for suppressing known findings"),
-    ] = None,
     fail_on: Annotated[
         str | None,
         typer.Option(
             "--fail-on",
-            help="Exit non-zero if findings meet this severity [info|low|medium|high|critical]",
+            help="Severity threshold — informational only in scan (use gate for enforcement) [info|low|medium|high|critical]",
         ),
     ] = None,
+    pr_comment: Annotated[
+        bool,
+        typer.Option("--pr-comment", help="Output as a PR-comment-optimized Markdown body"),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Show detailed finding descriptions"),
@@ -240,11 +207,12 @@ def scan(
     _validate_output_options(
         json_output,
         markdown_output,
+        pr_comment,
         sarif_output,
-        pr_comment_output,
+        annotations_output,
         diagnostics_output,
-        annotations_explicit=(annotations is True),
     )
+    _validate_path(path)
     cfg = _load_config(config, path)
     if fail_on:
         cfg.fail_on = _parse_severity(fail_on)
@@ -260,37 +228,20 @@ def scan(
 
     result = run_scan(path, cfg, diff_only=diff, git_meta=git_meta)
 
-    # Apply severity overrides and policy suppressions
-    result = _apply_policy(result, cfg)
-
-    # Apply baseline filtering
-    result = _apply_baseline(result, baseline_path, cfg)
-
-    # Determine annotation mode
-    emit_annot = _should_emit_annotations(
-        annotations,
-        json_output,
-        markdown_output,
-        sarif_output,
-        pr_comment_output,
-        diagnostics_output,
-    )
-
     if json_output:
         print_json(result)
-    elif sarif_output:
-        print_sarif(result)
-    elif pr_comment_output:
-        typer.echo(render_pr_comment(result, gate_passed=True))
     elif markdown_output:
         typer.echo(render_markdown(result))
+    elif pr_comment:
+        typer.echo(render_pr_comment(result, gate_passed=True))
+    elif sarif_output:
+        typer.echo(render_sarif(result))
+    elif annotations_output:
+        typer.echo(render_annotations(result))
     elif diagnostics_output:
-        print_diagnostics(result)
+        typer.echo(render_diagnostics(result))
     else:
         render_findings(result, verbose=verbose)
-
-    if emit_annot:
-        emit_annotations(result)
 
     if result.errors:
         for err in result.errors:
@@ -328,30 +279,16 @@ def gate(
     ] = False,
     sarif_output: Annotated[
         bool,
-        typer.Option("--sarif", help="Output findings as SARIF 2.1.0 JSON"),
+        typer.Option("--sarif", help="Output findings as SARIF"),
     ] = False,
-    pr_comment_output: Annotated[
+    annotations_output: Annotated[
         bool,
-        typer.Option("--pr-comment", help="Output PR-optimized Markdown comment"),
+        typer.Option("--annotations", help="Output as GitHub Actions annotations"),
     ] = False,
     diagnostics_output: Annotated[
         bool,
-        typer.Option(
-            "--diagnostics",
-            help="Output a stable JSON diagnostics array for IDE / editor integrations",
-        ),
+        typer.Option("--diagnostics", help="Output as diagnostics JSON array"),
     ] = False,
-    annotations: Annotated[
-        bool | None,
-        typer.Option(
-            "--annotations/--no-annotations",
-            help="Emit GitHub Actions annotations (auto-enabled in CI)",
-        ),
-    ] = None,
-    baseline_path: Annotated[
-        Path | None,
-        typer.Option("--baseline", help="Path to baseline file for suppressing known findings"),
-    ] = None,
     fail_on: Annotated[
         str | None,
         typer.Option(
@@ -359,6 +296,10 @@ def gate(
             help="Severity threshold for non-zero exit [info|low|medium|high|critical]",
         ),
     ] = None,
+    pr_comment: Annotated[
+        bool,
+        typer.Option("--pr-comment", help="Output as a PR-comment-optimized Markdown body"),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Show detailed finding descriptions"),
@@ -368,11 +309,12 @@ def gate(
     _validate_output_options(
         json_output,
         markdown_output,
+        pr_comment,
         sarif_output,
-        pr_comment_output,
+        annotations_output,
         diagnostics_output,
-        annotations_explicit=(annotations is True),
     )
+    _validate_path(path)
     cfg = _load_config(config, path)
     if fail_on:
         cfg.fail_on = _parse_severity(fail_on)
@@ -388,40 +330,23 @@ def gate(
 
     result = run_scan(path, cfg, diff_only=diff, git_meta=git_meta)
 
-    # Apply severity overrides and policy suppressions
-    result = _apply_policy(result, cfg)
-
-    # Apply baseline filtering
-    result = _apply_baseline(result, baseline_path, cfg)
-
     threshold = cfg.fail_on
     gate_passed = not result.has_blocking(threshold)
 
-    # Determine annotation mode
-    emit_annot = _should_emit_annotations(
-        annotations,
-        json_output,
-        markdown_output,
-        sarif_output,
-        pr_comment_output,
-        diagnostics_output,
-    )
-
     if json_output:
         print_json(result)
-    elif sarif_output:
-        print_sarif(result)
-    elif pr_comment_output:
-        typer.echo(render_pr_comment(result, gate_passed=gate_passed))
     elif markdown_output:
         typer.echo(render_markdown(result))
+    elif pr_comment:
+        typer.echo(render_pr_comment(result, gate_passed=gate_passed))
+    elif sarif_output:
+        typer.echo(render_sarif(result))
+    elif annotations_output:
+        typer.echo(render_annotations(result))
     elif diagnostics_output:
-        print_diagnostics(result)
+        typer.echo(render_diagnostics(result))
     else:
         render_findings(result, verbose=verbose)
-
-    if emit_annot:
-        emit_annotations(result)
 
     if result.errors:
         for err in result.errors:
@@ -445,11 +370,11 @@ def gate(
 # ---------------------------------------------------------------------------
 
 
-@app.command(name="publish-check")
+@app.command("publish-check")
 def publish_check(
     path: Annotated[
         Path,
-        typer.Option("--path", "-p", help="Package root containing package.json or pyproject.toml"),
+        typer.Option("--path", "-p", help="Package root directory"),
     ] = Path("."),
     config: Annotated[
         Path | None,
@@ -458,102 +383,94 @@ def publish_check(
     ecosystem: Annotated[
         str | None,
         typer.Option(
-            "--ecosystem",
-            help=(
-                "Which artifact to simulate [auto|npm|python-sdist|python-wheel]. "
-                "Defaults to the value in vibeguard.yaml `publish_check.ecosystem`."
-            ),
+            "--ecosystem", help="Ecosystem to simulate [auto|npm|python-sdist|python-wheel]"
         ),
     ] = None,
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Output findings + manifest as JSON"),
+        typer.Option("--json", help="Output as JSON"),
     ] = False,
     markdown_output: Annotated[
         bool,
-        typer.Option("--markdown", help="Output findings as Markdown"),
+        typer.Option("--markdown", help="Output as Markdown"),
     ] = False,
-    manifest_out: Annotated[
-        Path | None,
-        typer.Option(
-            "--manifest-out",
-            help="Write the publish manifest JSON to this path",
-        ),
-    ] = None,
     fail_on: Annotated[
         str | None,
-        typer.Option(
-            "--fail-on",
-            help="Severity threshold for non-zero exit [info|low|medium|high|critical]",
-        ),
+        typer.Option("--fail-on", help="Severity threshold for non-zero exit"),
     ] = None,
-    verbose: Annotated[
-        bool,
-        typer.Option("--verbose", "-v", help="Show detailed finding descriptions"),
-    ] = False,
+    manifest_out: Annotated[
+        Path | None,
+        typer.Option("--manifest-out", help="Write manifest JSON to this path"),
+    ] = None,
 ) -> None:
-    """Simulate a publish and gate on any findings in the published file set."""
+    """Simulate a package publish and scan for risky files."""
+    import json as json_mod
+
+    from vibeguard.config import apply_policy_suppressions
+    from vibeguard.publish.runner import EcosystemChoice, run_publish_check
+
     _validate_output_options(json_output, markdown_output)
     cfg = _load_config(config, path)
+
+    # Check if disabled in config
     if not cfg.publish_check.enabled:
-        err_console.print(
-            "[yellow]publish-check is disabled in vibeguard.yaml "
-            "(publish_check.enabled = false). Skipping.[/]"
-        )
-        raise typer.Exit(0)
+        err_console.print("[dim]publish-check disabled in config.[/]")
+        typer.echo("publish-check disabled")
+        return
 
-    threshold = _parse_severity(fail_on) if fail_on else cfg.publish_check.fail_on
-    effective_ecosystem = ecosystem if ecosystem is not None else cfg.publish_check.ecosystem
-    valid_ecosystems = {"auto", "npm", "python-sdist", "python-wheel"}
-    if effective_ecosystem not in valid_ecosystems:
-        err_console.print(
-            f"[red]Invalid --ecosystem: {effective_ecosystem!r}. "
-            f"Valid options: {', '.join(sorted(valid_ecosystems))}[/]"
-        )
-        raise typer.Exit(2)
+    # Determine ecosystem
+    eco: EcosystemChoice = "auto"
+    if ecosystem:
+        valid_ecosystems = ("auto", "npm", "python-sdist", "python-wheel")
+        if ecosystem not in valid_ecosystems:
+            err_console.print(
+                f"[red]Invalid ecosystem: {ecosystem!r}. "
+                f"Valid options: {', '.join(valid_ecosystems)}[/]"
+            )
+            raise typer.Exit(2)
+        eco = ecosystem  # type: ignore[assignment]
+    elif cfg.publish_check.ecosystem != "auto":
+        eco = cfg.publish_check.ecosystem  # type: ignore[assignment]
 
-    manifest, result = run_publish_check(path, cfg, ecosystem=effective_ecosystem)  # type: ignore[arg-type]
+    # Determine threshold
+    threshold = cfg.fail_on
+    if fail_on:
+        threshold = _parse_severity(fail_on)
+    elif cfg.publish_check.fail_on:
+        with contextlib.suppress(ValueError):
+            threshold = Severity(cfg.publish_check.fail_on)
 
-    # Apply severity overrides and policy suppressions (consistent with scan/gate)
-    result = _apply_policy(result, cfg)
+    manifest, result = run_publish_check(path, cfg, ecosystem=eco)
 
-    if manifest_out is not None:
+    # Apply suppressions
+    if cfg.suppressions and result.findings:
+        active, _warnings = apply_policy_suppressions(result.findings, cfg.suppressions)
+        result = result.model_copy(update={"findings": active})
+
+    # Write manifest if requested
+    if manifest_out:
         manifest_out.parent.mkdir(parents=True, exist_ok=True)
-        manifest_out.write_text(manifest.to_json(), encoding="utf-8")
-        err_console.print(f"[green]✓[/] Wrote manifest to [bold]{manifest_out}[/]")
+        manifest_out.write_text(json_mod.dumps(manifest.model_dump(), indent=2))
 
+    # Output
     if json_output:
-        import json as _json
-
         payload = {
-            "manifest": _json.loads(manifest.to_json()),
-            "result": result.model_dump(mode="json"),
+            "manifest": manifest.model_dump(),
+            "result": result.model_dump(),
         }
-        typer.echo(_json.dumps(payload, indent=2, sort_keys=True))
+        typer.echo(json_mod.dumps(payload, indent=2))
     elif markdown_output:
         typer.echo(render_markdown(result))
     else:
-        err_console.print(
-            f"[bold]publish-check[/] ecosystem=[cyan]{manifest.ecosystem}[/] "
-            f"files=[bold]{len(manifest.files)}[/] "
-            f"size=[bold]{manifest.total_bytes}[/]B"
-        )
-        render_findings(result, verbose=verbose)
+        render_findings(result)
 
-    if result.errors:
-        for err in result.errors:
-            err_console.print(f"[yellow]⚠ {err}[/]")
-
-    if result.has_blocking(threshold):
-        err_console.print(
-            f"\n[bold red]✗ publish-check failed:[/] findings at or above "
-            f"[bold]{threshold.value}[/] severity detected.\n"
-        )
+    # Gate logic
+    gate_passed = not result.has_blocking(threshold)
+    if gate_passed:
+        err_console.print("[bold green]✓ publish-check passed[/]")
+    else:
+        err_console.print("[bold red]✗ publish-check failed[/]")
         raise typer.Exit(1)
-    err_console.print(
-        f"\n[bold green]✓ publish-check passed:[/] no findings at or above "
-        f"[bold]{threshold.value}[/] severity in the published file set.\n"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -671,12 +588,186 @@ def explain(
             c.print(f"[dim]Tags:[/] {', '.join(metadata.tags)}")
             return
 
-    c.print(_DEFAULT_EXPLANATION.format(finding_id=finding_id))
+    err_console.print(f"[red]Unknown rule or finding ID: {finding_id}[/]")
+    raise typer.Exit(2)
+
+
+# ---------------------------------------------------------------------------
+# rules (subcommand group)
+# ---------------------------------------------------------------------------
+
+rules_app = typer.Typer(
+    name="rules",
+    help="Explore available rules and their metadata.",
+    no_args_is_help=True,
+)
+app.add_typer(rules_app, name="rules")
+
+
+@rules_app.command("list")
+def rules_list(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON"),
+    ] = False,
+    tag: Annotated[
+        str | None,
+        typer.Option("--tag", help="Filter rules by tag"),
+    ] = None,
+    list_plugins: Annotated[
+        bool,
+        typer.Option("--list-plugins", help="Include plugin information"),
+    ] = False,
+) -> None:
+    """List all registered rules."""
+    from vibeguard.rules.registry import RULE_REGISTRY
+
+    # Ensure rules are loaded
+    _ensure_rules_loaded()
+
+    rules = list(RULE_REGISTRY.values())
+
+    # Filter by tag
+    if tag:
+        tag_lower = tag.lower()
+        rules = [r for r in rules if tag_lower in [t.lower() for t in r.tags]]
+
+    if json_output:
+        import json as json_mod
+
+        payload: dict[str, object] = {
+            "version": __version__,
+            "rules": [
+                {
+                    "rule_id": r.rule_id,
+                    "title": r.title,
+                    "description": r.description,
+                    "finding_ids": list(r.finding_ids),
+                    "default_severity": r.default_severity,
+                    "confidence": r.confidence,
+                    "tags": list(r.tags),
+                    "applies_to": list(r.applies_to),
+                }
+                for r in rules
+            ],
+        }
+        if list_plugins:
+            payload["plugins"] = _get_plugins_info()
+        typer.echo(json_mod.dumps(payload, indent=2))
+    else:
+        from rich.table import Table
+
+        c = Console()
+        table = Table(title="VibeGuard Rules")
+        table.add_column("Rule ID", style="cyan", no_wrap=True)
+        table.add_column("Title")
+        table.add_column("Severity", style="yellow")
+        table.add_column("Tags")
+        for r in sorted(rules, key=lambda x: x.rule_id):
+            table.add_row(r.rule_id, r.title, r.default_severity, ", ".join(r.tags))
+        c.print(table)
+
+
+@rules_app.command("explain")
+def rules_explain(
+    identifier: Annotated[str, typer.Argument(help="Rule ID or finding ID to explain")],
+) -> None:
+    """Explain a specific rule or finding ID."""
+    from vibeguard.rules.registry import RULE_REGISTRY
+
+    _ensure_rules_loaded()
+    c = Console()
+    upper_id = identifier.upper()
+
+    # Try as rule_id first
+    if identifier.lower() in RULE_REGISTRY:
+        meta = RULE_REGISTRY[identifier.lower()]
+        _print_rule_detail(c, meta)
+        return
+
+    # Try as finding_id
+    for meta in RULE_REGISTRY.values():
+        upper_finding_ids = [fid.upper() for fid in meta.finding_ids]
+        if upper_id in upper_finding_ids:
+            _print_rule_detail(c, meta)
+            return
+
+    err_console.print(f"[red]Unknown rule or finding ID: {identifier}[/]")
+    raise typer.Exit(2)
+
+
+def _print_rule_detail(c: Console, meta: Any) -> None:
+    """Print detailed rule info to console."""
+    c.print(f"\n[bold cyan]{meta.rule_id}[/] — [bold]{meta.title}[/]\n")
+    c.print(f"{meta.description}\n")
+    c.print(f"[dim]Default severity:[/] {meta.default_severity}")
+    c.print(f"[dim]Confidence:[/] {meta.confidence}")
+    c.print(f"[dim]Finding IDs:[/] {', '.join(meta.finding_ids)}")
+    c.print(f"[dim]Tags:[/] {', '.join(meta.tags)}")
+    c.print(f"[dim]Applies to:[/] {', '.join(meta.applies_to)}")
+    if meta.docs_url:
+        c.print(f"[dim]Documentation:[/] {meta.docs_url}")
+    c.print()
+
+
+def _ensure_rules_loaded() -> None:
+    """Import all rule modules to ensure they register themselves."""
+    from vibeguard.rules.registry import RULE_REGISTRY
+
+    if RULE_REGISTRY:
+        return
+    # Import all rule modules to trigger registration
+    import importlib
+    import pkgutil
+
+    import vibeguard.rules as rules_pkg
+
+    for _importer, modname, _ispkg in pkgutil.iter_modules(rules_pkg.__path__):
+        if modname == "__init__" or modname == "registry":
+            continue
+        with contextlib.suppress(Exception):
+            importlib.import_module(f"vibeguard.rules.{modname}")
+
+
+def _get_plugins_info() -> dict[str, list[str]]:
+    """Get info about loaded/failed plugins."""
+    loaded: list[str] = []
+    failed: list[str] = []
+    try:
+        from importlib.metadata import entry_points
+
+        eps = entry_points()
+        if hasattr(eps, "select"):
+            plugin_eps = eps.select(group="vibeguard.plugins")
+        else:
+            plugin_eps = eps.get("vibeguard.plugins", [])  # type: ignore[arg-type]
+        for ep in plugin_eps:
+            try:
+                ep.load()
+                loaded.append(ep.name)
+            except Exception:
+                failed.append(ep.name)
+    except Exception:
+        pass
+    return {"loaded": loaded, "failed": failed}
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _validate_path(path: Path) -> None:
+    """Validate that the scan path exists and is a directory."""
+    if not path.exists():
+        err_console.print(f"[red]Error: path does not exist: {path}[/]")
+        raise typer.Exit(2)
+    if path.is_file():
+        err_console.print(
+            f"[red]Error: path is a file, not a directory: {path}[/]\n"
+            "Hint: pass the parent directory instead."
+        )
+        raise typer.Exit(2)
 
 
 def _load_config(config_path: Path | None, scan_path: Path) -> VibeGuardConfig:
@@ -718,324 +809,3 @@ def _parse_severity(value: str) -> Severity:
     except ValueError:
         err_console.print(f"[red]Invalid severity: {value!r}. Valid options: {', '.join(valid)}[/]")
         raise typer.Exit(2) from None
-
-
-def _apply_policy(result: ScanResult, cfg: VibeGuardConfig) -> ScanResult:
-    """Apply severity overrides and policy suppressions to a scan result."""
-    findings = result.findings
-
-    # Apply severity overrides (#27)
-    if cfg.severity_overrides:
-        findings = apply_severity_overrides(findings, cfg.severity_overrides)
-
-    # Apply policy suppressions (#28)
-    warnings: list[Finding] = []
-    if cfg.suppressions:
-        findings, warnings = apply_policy_suppressions(findings, cfg.suppressions)
-
-    # Use model_copy so we inherit any future ScanResult fields rather than
-    # re-enumerating the schema each time a field is added.
-    return result.model_copy(update={"findings": findings + warnings})
-
-
-def _apply_baseline(
-    result: ScanResult, baseline_path: Path | None, cfg: VibeGuardConfig
-) -> ScanResult:
-    """Apply baseline filtering to a scan result."""
-    from vibeguard.baseline import Baseline, BaselineLoadError, filter_baselined
-
-    bp = baseline_path
-    if bp is None and cfg.baseline:
-        bp = Path(cfg.baseline)
-
-    if bp is None or not bp.exists():
-        return result
-
-    try:
-        baseline = Baseline.load(bp)
-    except BaselineLoadError as exc:
-        err_console.print(f"[red]Error: {exc}[/]")
-        raise typer.Exit(2) from exc
-    filtered = filter_baselined(result.findings, baseline)
-    return result.model_copy(update={"findings": filtered})
-
-
-def _should_emit_annotations(
-    annotations_flag: bool | None,
-    json_output: bool,
-    markdown_output: bool,
-    sarif_output: bool,
-    pr_comment_output: bool,
-    diagnostics_output: bool = False,
-) -> bool:
-    """Determine whether to emit GitHub Actions annotations."""
-    # Explicit flag takes precedence
-    if annotations_flag is True:
-        return True
-    if annotations_flag is False:
-        return False
-    # Auto-enable in GitHub Actions unless another structured output is selected
-    return is_github_actions() and not any(
-        [json_output, markdown_output, sarif_output, pr_comment_output, diagnostics_output]
-    )
-
-
-# ---------------------------------------------------------------------------
-# baseline
-# ---------------------------------------------------------------------------
-
-baseline_app = typer.Typer(name="baseline", help="Manage baseline files.", no_args_is_help=True)
-app.add_typer(baseline_app)
-
-
-@baseline_app.command("create")
-def baseline_create(
-    path: Annotated[
-        Path,
-        typer.Option("--path", "-p", help="Repository or directory to scan"),
-    ] = Path("."),
-    config: Annotated[
-        Path | None,
-        typer.Option("--config", "-c", help="Path to vibeguard.yaml"),
-    ] = None,
-    output: Annotated[
-        Path,
-        typer.Option("--output", "-o", help="Output baseline file path"),
-    ] = Path(".vibeguard-baseline.json"),
-) -> None:
-    """Create a baseline file from a full scan of the repository."""
-    from vibeguard.baseline import create_baseline
-
-    cfg = _load_config(config, path)
-    result = run_scan(path, cfg, diff_only=False)
-
-    baseline = create_baseline(result.findings)
-    baseline.save(output)
-
-    err_console.print(
-        f"[green]✓[/] Baseline created: [bold]{output}[/] "
-        f"({len(baseline.entries)} finding(s) fingerprinted)"
-    )
-
-
-@baseline_app.command("update")
-def baseline_update(
-    path: Annotated[
-        Path,
-        typer.Option("--path", "-p", help="Repository or directory to scan"),
-    ] = Path("."),
-    config: Annotated[
-        Path | None,
-        typer.Option("--config", "-c", help="Path to vibeguard.yaml"),
-    ] = None,
-    output: Annotated[
-        Path,
-        typer.Option("--output", "-o", help="Baseline file path to update"),
-    ] = Path(".vibeguard-baseline.json"),
-) -> None:
-    """Re-scan and update an existing baseline file."""
-    from vibeguard.baseline import create_baseline
-
-    cfg = _load_config(config, path)
-    result = run_scan(path, cfg, diff_only=False)
-
-    baseline = create_baseline(result.findings)
-    baseline.save(output)
-
-    err_console.print(
-        f"[green]✓[/] Baseline updated: [bold]{output}[/] "
-        f"({len(baseline.entries)} finding(s) fingerprinted)"
-    )
-
-
-# ---------------------------------------------------------------------------
-# rules
-# ---------------------------------------------------------------------------
-
-rules_app = typer.Typer(
-    name="rules",
-    help="Inspect available rules and their finding IDs.",
-    no_args_is_help=True,
-)
-app.add_typer(rules_app)
-
-
-def _ensure_rules_loaded() -> None:
-    """Import every rule module so ``RULE_REGISTRY`` is populated.
-
-    Delegates to the canonical ``vibeguard.rules.load_all_builtin_rules``
-    so the module list is maintained in exactly one place.
-    """
-    from vibeguard.rules import load_all_builtin_rules
-
-    load_all_builtin_rules()
-
-
-@rules_app.command("list")
-def rules_list(
-    json_output: Annotated[
-        bool,
-        typer.Option("--json", help="Output as JSON instead of a table"),
-    ] = False,
-    tag: Annotated[
-        str | None,
-        typer.Option("--tag", help="Filter by tag (case-insensitive)"),
-    ] = None,
-    list_plugins: Annotated[
-        bool,
-        typer.Option(
-            "--list-plugins",
-            help="Run plugin discovery and include loaded/failed plugins in the output",
-        ),
-    ] = False,
-) -> None:
-    """List all registered rules and their finding IDs."""
-    import json as _json
-
-    from rich.table import Table
-
-    from vibeguard import __version__
-    from vibeguard.rules.plugins import discover_plugin_rules
-    from vibeguard.rules.registry import RULE_REGISTRY
-
-    _ensure_rules_loaded()
-
-    # Force-discover plugins so their rules are registered and listed.
-    # We intentionally pass an empty disabled list here: ``rules list`` is a
-    # discovery tool — users who want to hide a plugin can rely on
-    # ``plugins.disabled`` for runtime behaviour, but the listing should
-    # surface everything installed.
-    plugin_summary: tuple[list, list] = ([], [])
-    if list_plugins:
-        plugin_summary = discover_plugin_rules()
-        # Instantiating plugin rules already runs the rule's module import,
-        # which (for well-behaved plugins) registers metadata. Nothing more
-        # needed here.
-
-    tag_filter = tag.lower() if tag else None
-
-    rows: list[dict[str, object]] = []
-    for rule_id in sorted(RULE_REGISTRY.keys()):
-        meta = RULE_REGISTRY[rule_id]
-        if tag_filter and tag_filter not in {t.lower() for t in meta.tags}:
-            continue
-        rows.append(
-            {
-                "rule_id": meta.rule_id,
-                "title": meta.title,
-                "default_severity": meta.default_severity,
-                "confidence": meta.confidence,
-                "tags": list(meta.tags),
-                "finding_ids": list(meta.finding_ids),
-                "applies_to": list(meta.applies_to),
-            }
-        )
-
-    if json_output:
-        payload: dict[str, object] = {"version": __version__, "rules": rows}
-        if list_plugins:
-            loaded, failures = plugin_summary
-            payload["plugins"] = {
-                "loaded": [
-                    {"name": p.name, "distribution": p.distribution, "rule_id": p.rule.id}
-                    for p in loaded
-                ],
-                "failed": [
-                    {"name": f.name, "distribution": f.distribution, "reason": f.reason}
-                    for f in failures
-                ],
-            }
-        typer.echo(_json.dumps(payload, indent=2, sort_keys=False))
-        return
-
-    c = Console()
-    table = Table(title=f"Rules available in vibeguard {__version__}")
-    table.add_column("Rule", style="cyan", no_wrap=True)
-    table.add_column("Title")
-    table.add_column("Severity", no_wrap=True)
-    table.add_column("Confidence", no_wrap=True)
-    table.add_column("Tags")
-    for row in rows:
-        table.add_row(
-            str(row["rule_id"]),
-            str(row["title"]),
-            str(row["default_severity"]),
-            str(row["confidence"]),
-            ", ".join(row["tags"]),  # type: ignore[arg-type]
-        )
-    c.print(table)
-    if not rows:
-        err_console.print("[yellow]No rules matched the filter.[/]")
-
-    if list_plugins:
-        loaded, failures = plugin_summary
-        plug_table = Table(title="Discovered plugins")
-        plug_table.add_column("Status", style="cyan", no_wrap=True)
-        plug_table.add_column("Name")
-        plug_table.add_column("Distribution")
-        plug_table.add_column("Detail")
-        for p in loaded:
-            plug_table.add_row(
-                "[green]loaded[/]", p.name, p.distribution or "—", f"rule_id={p.rule.id}"
-            )
-        for f in failures:
-            plug_table.add_row("[red]failed[/]", f.name, f.distribution or "—", f.reason)
-        if not loaded and not failures:
-            plug_table.add_row("—", "(none)", "—", "no entry points in 'vibeguard.rules'")
-        c.print(plug_table)
-
-
-@rules_app.command("explain")
-def rules_explain(
-    identifier: Annotated[
-        str,
-        typer.Argument(help="Rule ID (e.g. 'secrets') or finding ID (e.g. 'SEC-ENV')"),
-    ],
-) -> None:
-    """Explain a rule or finding ID using metadata from the rule registry."""
-    from rich.panel import Panel
-
-    from vibeguard.rules.registry import RULE_REGISTRY
-
-    _ensure_rules_loaded()
-
-    c = Console()
-    needle = identifier.strip()
-
-    # Try exact rule_id first.
-    meta = RULE_REGISTRY.get(needle) or RULE_REGISTRY.get(needle.lower())
-    if meta is None:
-        # Otherwise, treat as a finding ID and resolve to its rule.
-        upper = needle.upper()
-        for candidate in RULE_REGISTRY.values():
-            if upper in {fid.upper() for fid in candidate.finding_ids}:
-                meta = candidate
-                # Print a thin header pointing at the finding ID's parent rule
-                # before falling through to the full rule explanation below.
-                c.print(f"[bold]{upper}[/] is produced by rule [cyan]{meta.rule_id}[/]\n")
-                break
-
-    if meta is None:
-        err_console.print(
-            f"[red]Unknown rule or finding ID: {identifier!r}.[/] "
-            f"Run 'vibeguard rules list' to see available rules."
-        )
-        raise typer.Exit(2)
-
-    finding_lines = [f"  • {fid}" for fid in meta.finding_ids] or ["  (none registered)"]
-    body_lines = [
-        f"[bold]{meta.title}[/] ({meta.rule_id})",
-        "",
-        meta.description,
-        "",
-        f"[dim]Default severity:[/] {meta.default_severity}",
-        f"[dim]Confidence:[/]       {meta.confidence}",
-        f"[dim]Tags:[/]             {', '.join(meta.tags) or '—'}",
-        f"[dim]Applies to:[/]       {', '.join(meta.applies_to) or '*'}",
-        "",
-        "[bold]Finding IDs[/]",
-        *finding_lines,
-    ]
-    if meta.docs_url:
-        body_lines += ["", f"[dim]Docs:[/] {meta.docs_url}"]
-    c.print(Panel.fit("\n".join(body_lines), title=meta.rule_id))

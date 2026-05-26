@@ -62,8 +62,8 @@ def render_findings(result: ScanResult, verbose: bool = False) -> None:
     # Width=10 ensures "☠ CRITICAL" (the widest label) renders on a single
     # line so the GitHub Actions problem matcher in
     # .github/problem-matchers/vibeguard.json can match the row in one shot.
-    table.add_column("Sev", style="bold", width=10)
-    table.add_column("Rule", width=16)
+    table.add_column("Sev", style="bold", width=10, no_wrap=True, min_width=10)
+    table.add_column("Rule", width=16, no_wrap=True, min_width=12)
     table.add_column("Path", width=40)
     table.add_column("Title", width=50)
 

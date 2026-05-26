@@ -5,7 +5,7 @@ The `dgenio/vibeguard` action runs VibeGuard as a composite GitHub Action step.
 ## Usage
 
 ```yaml
-- uses: dgenio/vibeguard@v0.2
+- uses: dgenio/vibeguard@v0.7
   with:
     path: '.'
     diff: 'true'
@@ -22,7 +22,7 @@ The `dgenio/vibeguard` action runs VibeGuard as a composite GitHub Action step.
 | `config` | No | `` | Path to vibeguard.yaml |
 | `diff` | No | `false` | Scan only changed files |
 | `fail-on` | No | `high` | Severity threshold for gate failure |
-| `output-format` | No | `console` | `console`, `json`, `markdown`, `sarif`, `pr-comment` |
+| `output-format` | No | `console` | `console`, `json`, `markdown`, `sarif`, `annotations`, `diagnostics`, `pr-comment` |
 | `output-file` | No | `` | Write output to this file path |
 | `baseline` | No | `` | Path to baseline file |
 | `python-version` | No | `3.11` | Python version to use |
@@ -54,7 +54,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: dgenio/vibeguard@v0.2
+      - uses: dgenio/vibeguard@v0.7
         id: vibeguard
         with:
           diff: 'true'

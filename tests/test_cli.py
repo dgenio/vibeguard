@@ -84,7 +84,7 @@ class TestCLIExplain:
 
     def test_explain_unknown_id(self):
         result = runner.invoke(app, ["explain", "NOTREAL-999"])
-        assert result.exit_code == 0  # Should not crash
+        assert result.exit_code == 2  # Unknown ID exits non-zero
 
 
 class TestCLIVersion:
