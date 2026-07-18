@@ -28,6 +28,22 @@ CONSTRAINTS_MIN = REPO_ROOT / "constraints-min.txt"
 # Python versions VibeGuard advertises support for (inclusive).
 EXPECTED_PYTHONS = ("3.10", "3.11", "3.12", "3.13", "3.14")
 
+# Lean-core runtime-dependency budget (#248). VibeGuard's auditability pitch — a
+# small, reviewable, offline tool inside the CI trust boundary — depends directly
+# on a lean dependency surface, so the runtime deps are a fixed budget rather than
+# something that accretes. Adding one requires updating this allowlist in the same
+# PR (making the change visible in review) and justifying it against the criteria
+# in CONTRIBUTING's "Dependency policy (lean core)". Heavier features belong behind
+# an optional extra. Dev/test extras are a looser risk class and are not budgeted.
+RUNTIME_DEPENDENCY_BUDGET = {
+    "typer",
+    "rich",
+    "pydantic",
+    "pyyaml",
+    "pathspec",
+    "tomli",  # TOML parser backport; installed only on Python < 3.11
+}
+
 # ``name (op version) [; marker]`` — enough to pull the package name, the
 # comparator, and the version out of a PEP 508 requirement string.
 _REQ_RE = re.compile(
@@ -105,6 +121,41 @@ class TestDependencyPolicy:
         assert not mismatched, (
             "constraints-min.txt floors drifted from pyproject lower bounds "
             f"(declared vs pinned): {mismatched}"
+        )
+
+
+class TestDependencyBudget:
+    """The runtime-dependency set is a fixed budget, guarded by an allowlist (#248).
+
+    Separate from the lower-bounds-only *constraint style* above (#121): this
+    guards the *count and kind* of runtime dependencies. A new runtime dep fails
+    CI until it is consciously added to ``RUNTIME_DEPENDENCY_BUDGET`` in the same
+    PR, forcing the tradeoff to be visible and justified.
+    """
+
+    def _declared_runtime_names(self) -> set[str]:
+        names: set[str] = set()
+        for req in _runtime_requirements():
+            m = _REQ_RE.match(req)
+            assert m, f"Unparseable dependency: {req!r}"
+            names.add(m.group("name").lower())
+        return names
+
+    def test_runtime_dependencies_match_the_budget(self):
+        declared = self._declared_runtime_names()
+        budget = {name.lower() for name in RUNTIME_DEPENDENCY_BUDGET}
+
+        added = sorted(declared - budget)
+        removed = sorted(budget - declared)
+        assert not added, (
+            f"Runtime dependency added without updating the lean-core budget: {added}. "
+            "If it is justified (see CONTRIBUTING → 'Dependency policy (lean core)'), add "
+            "it to RUNTIME_DEPENDENCY_BUDGET in this file in the same PR; otherwise move "
+            "the feature behind an optional extra in [project.optional-dependencies]."
+        )
+        assert not removed, (
+            f"Runtime dependency removed but still listed in the budget: {removed}. "
+            "Update RUNTIME_DEPENDENCY_BUDGET to match pyproject."
         )
 
 

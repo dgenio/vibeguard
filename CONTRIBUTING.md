@@ -135,6 +135,35 @@ drift that only `make ci` would catch can no longer slip onto `main`. If
 
 ---
 
+## Dependency policy (lean core)
+
+VibeGuard's auditability pitch is that it's a small, reviewable, offline tool
+that sits inside your CI trust boundary. That depends on a **lean runtime
+dependency surface**, so the runtime dependencies in `[project.dependencies]`
+are treated as a **budget**, not a free-for-all:
+
+- **Core stays minimal.** Today's runtime set is `typer`, `rich`, `pydantic`,
+  `pyyaml`, `pathspec`, and the `tomli` backport (Python 3.10 only). Any change
+  to that set must update the allowlist in `tests/test_packaging_floor.py`
+  (`RUNTIME_DEPENDENCY_BUDGET`) in the same PR — a CI tripwire fails otherwise —
+  so every addition is a conscious, reviewed tradeoff.
+- **Bar for a new core dependency.** Prefer the standard library. A new runtime
+  dep should be small, well-maintained, permissively licensed, and lightweight
+  (no network clients, no heavyweight parser/engine megadeps, no native-build
+  burden). If it can't clear that bar, it doesn't belong in core.
+- **Heavier features go behind an optional extra.** Anything that would pull a
+  large or specialized dependency (HTML reports, an AST engine, notebook
+  parsing, a registry client) ships as `pip install vibeguard-gate[feature]` via
+  `[project.optional-dependencies]`, keeping the default install lean.
+- This governs dependency *count and kind*; the separate lower-bounds-only
+  **constraint style** (`>=`, no caps) is documented under #121 and guarded in
+  the same test file.
+
+Dev/test tooling (`[project.optional-dependencies].dev`) is a looser risk class
+and is not budgeted.
+
+---
+
 ## Running VibeGuard against the bundled examples
 
 ```bash

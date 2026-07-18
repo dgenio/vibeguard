@@ -51,6 +51,10 @@ changes, new dependencies, performance considerations, security-sensitive
 code paths.
 -->
 
+- [ ] Any new **runtime** dependency is justified against the lean-core budget
+  (CONTRIBUTING → "Dependency policy (lean core)") and added to
+  `RUNTIME_DEPENDENCY_BUDGET` — or N/A.
+
 ## Checklist
 
 - [ ] Tests pass locally (`make test` or `pytest`)
