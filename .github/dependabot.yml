@@ -1,0 +1,40 @@
+# Automated dependency updates (#228). Three ecosystems, weekly, grouped to keep
+# PR volume proportionate to maintainer bandwidth. The github-actions updater
+# also keeps the commit-SHA pins in .github/workflows/* fresh (#190) — Dependabot
+# bumps the SHA and the trailing `# vX.Y.Z` comment together.
+version: 2
+updates:
+  # Python dependencies (runtime + dev). Minor/patch bumps are grouped into a
+  # single weekly PR; majors open individually so a human can read the changelog.
+  # Note: this does not change the library-grade constraint policy (#121) — floors
+  # stay `>=` lower bounds; we do not add exclusive upper caps.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by this repo's workflows (keeps the SHA pins current).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # The Docker base image (python:3.12-slim in the Dockerfile).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

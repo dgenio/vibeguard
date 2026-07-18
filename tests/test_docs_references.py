@@ -324,9 +324,12 @@ class TestRoadmap:
 
     def test_roadmap_documents_label_taxonomy(self):
         text = _read(self.ROADMAP)
-        # A first-time contributor must be able to find an entry point.
-        assert "good-first-issue" in text
-        assert "v1-blocker" in text
+        # The evidence-first taxonomy (#170): priority, status, and evidence
+        # labels must all be documented so contributors can read the funnel.
+        assert "priority:p0" in text
+        assert "status:blocked" in text
+        assert "status:maintenance" in text
+        assert "needs-evidence" in text
 
     def test_roadmap_distinguishes_core_from_plugin(self):
         text = _read(self.ROADMAP).lower()

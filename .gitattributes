@@ -1,0 +1,5 @@
+# Deterministic line endings across OSes (#167). VibeGuard's Windows/macOS CI
+# legs and its line-based rules depend on a stable working tree: forcing LF on
+# checkout everywhere avoids CRLF-vs-LF false failures in `ruff format --check`
+# and in fixture-exact test assertions.
+* text=auto eol=lf

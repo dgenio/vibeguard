@@ -507,7 +507,10 @@ class VibeGuardConfig(BaseModel):
 
         config_path = Path(path)
         if config_path.exists():
-            with config_path.open() as f:
+            # Read as UTF-8 explicitly (#167): the platform default is cp1252 on
+            # Windows, which raises UnicodeDecodeError on the UTF-8 config files
+            # VibeGuard writes and on arbitrary non-ASCII bytes.
+            with config_path.open(encoding="utf-8") as f:
                 data: dict[str, Any] = yaml.safe_load(f) or {}
         else:
             data = {}

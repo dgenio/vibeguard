@@ -10,6 +10,11 @@ This guide covers the basics. For deeper rule-authoring guidance, see
 For security disclosures, see [SECURITY.md](SECURITY.md) — do not file
 public issues for vulnerabilities.
 
+Most VibeGuard PRs come from AI coding agents. If you're one, read
+[AGENTS.md](AGENTS.md) — the short, high-signal version of the rules below
+(run `make ci` before pushing, don't hand-edit generated files, wire new rules
+into two import sites, respect the dependency budget).
+
 ---
 
 ## Project direction & where to start
@@ -19,17 +24,17 @@ documenting the gate before adding many new rules. Before picking up a
 larger change, skim:
 
 - **[docs/roadmap.md](docs/roadmap.md)** — Now / Next / Later / Non-goals,
-  the issue **label taxonomy** (`good-first-issue`, `v1-blocker`,
-  `rule-request`, …), what makes a good rule, and when to ship a plugin
-  instead of a core rule.
+  the evidence-first issue **label taxonomy** (`priority:p0`/`priority:p1`,
+  `status:blocked`/`status:validation`/`status:maintenance`, `needs-evidence`,
+  …), what makes a good rule, and when to ship a plugin instead of a core rule.
 - **[docs/stability-contract.md](docs/stability-contract.md)** — the
   promises core rules and outputs carry, so you know what counts as a
   breaking change.
 
-Good first contributions: issues labelled `good-first-issue`,
-false-positive reports with a clear repro, and docs. New rules and
-integrations land most easily when they match the **Now / Next** focus in
-the roadmap. Maintainers cutting a release should follow
+Good first contributions: issues labelled `status:maintenance` (repo quality,
+CI, docs, contributor experience), false-positive reports with a clear repro,
+and docs. New rules and integrations land most easily when they match the
+**Now / Next** focus in the roadmap. Maintainers cutting a release should follow
 [docs/release-checklist.md](docs/release-checklist.md).
 
 ---
@@ -126,8 +131,56 @@ and add a comment when you must — usually a small refactor is cleaner.
 make ci
 ```
 
-That runs, in order: `lint`, `format-check`, `typecheck`, `test`. If
+That runs, in order: `lint`, `format-check`, `typecheck`, `docs-check`,
+`bench-precision-check`, `check-versions`, `test`. The three middle guards are
+generated-file / doc-drift checks (`docs/rules.md`, `docs/precision-report.md`,
+and cross-doc version references) — they are enforced in GitHub Actions too, so a
+drift that only `make ci` would catch can no longer slip onto `main`. If
 `make ci` is green locally, GitHub Actions almost always is too.
+
+---
+
+## Dependency policy (lean core)
+
+VibeGuard's auditability pitch is that it's a small, reviewable, offline tool
+that sits inside your CI trust boundary. That depends on a **lean runtime
+dependency surface**, so the runtime dependencies in `[project.dependencies]`
+are treated as a **budget**, not a free-for-all:
+
+- **Core stays minimal.** Today's runtime set is `typer`, `rich`, `pydantic`,
+  `pyyaml`, `pathspec`, and the `tomli` backport (Python 3.10 only). Any change
+  to that set must update the allowlist in `tests/test_packaging_floor.py`
+  (`RUNTIME_DEPENDENCY_BUDGET`) in the same PR — a CI tripwire fails otherwise —
+  so every addition is a conscious, reviewed tradeoff.
+- **Bar for a new core dependency.** Prefer the standard library. A new runtime
+  dep should be small, well-maintained, permissively licensed, and lightweight
+  (no network clients, no heavyweight parser/engine megadeps, no native-build
+  burden). If it can't clear that bar, it doesn't belong in core.
+- **Heavier features go behind an optional extra.** Anything that would pull a
+  large or specialized dependency (HTML reports, an AST engine, notebook
+  parsing, a registry client) ships as `pip install vibeguard-gate[feature]` via
+  `[project.optional-dependencies]`, keeping the default install lean.
+- This governs dependency *count and kind*; the separate lower-bounds-only
+  **constraint style** (`>=`, no caps) is documented under #121 and guarded in
+  the same test file.
+
+Dev/test tooling (`[project.optional-dependencies].dev`) is a looser risk class
+and is not budgeted.
+
+### Dependency-update PRs (Dependabot)
+
+`.github/dependabot.yml` opens weekly, grouped update PRs for three ecosystems:
+Python packages (`pip`), GitHub Actions, and the Docker base image. Review bar:
+
+- **Minor / patch** bumps — a green `make ci` (which CI runs on the PR) is the
+  bar; merge once checks pass.
+- **Major** bumps — additionally skim the changelog for breaking changes before
+  merging, and check the floor-deps job still passes.
+
+Dependabot updates the SHA pins in `.github/workflows/*` (and their version
+comments) automatically; the generated-workflow template in
+`vibeguard/ci_setup.py` is a string literal Dependabot can't see, so refresh
+those pins by hand at release time (see `docs/release-checklist.md`).
 
 ---
 
@@ -191,11 +244,34 @@ PKG-NPMLEAK detection style.
 
 ## Pull request guidance
 
-**Keep PRs focused.** One issue, one PR. If you spot something adjacent
-that needs fixing, file a follow-up issue — don't bundle it.
+**Keep PRs focused — one issue, one PR, with judgement.** The default is a
+single focused issue per PR. Small, closely-related maintenance items that share
+a surface (e.g. several CI or docs fixes) may be batched when that is genuinely
+cleaner than separate PRs — call out the grouping in the description. If a change
+is large or reaches into unrelated areas, split it, and file a follow-up issue
+for anything adjacent rather than smuggling it in.
 
 **Link the issue.** Use `Closes #NNN` in the PR body so it auto-closes on
 merge. The PR template prompts for this.
+
+**Keeping your branch current — rebase, don't merge.** Stay in sync with `main`
+by rebasing, not by merging `main` into your branch:
+
+```bash
+git fetch origin
+git rebase origin/main
+# resolve any conflicts on your branch, then:
+git push --force-with-lease
+```
+
+Avoid `git merge main` into a feature branch: it creates merge bubbles that make
+the diff harder to review and conflicts harder to reason about. Rebasing keeps a
+linear, readable history.
+
+**How PRs land.** Maintainers merge PRs with a **merge commit** (GitHub's
+default "Merge pull request #NNN"), so your branch's commits land on `main`
+as-is — another reason to keep the branch history clean (rebased, focused
+commits, conventional-commit subjects) before requesting review.
 
 **Match the repo's idioms.** Before adding a new pattern, grep for an
 existing example and match its style (test layout, error handling,

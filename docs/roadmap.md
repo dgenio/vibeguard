@@ -63,24 +63,47 @@ an opt-in plugin, not in the core gate.
 
 ## Issue label taxonomy
 
-Labels organise the backlog into a contribution funnel. The intended
-taxonomy:
+The backlog is organised around an **evidence-first funnel** (#170): labels make
+visible *why* an issue is open, *when* it may start, and *what* evidence or
+dependency unlocks it — so speculative ideas, validation work, maintenance, and
+immediate product-risk fixes don't compete in one undifferentiated queue.
+
+**Priority**
 
 | Label | Meaning |
 |---|---|
-| `v1-blocker` | Must ship before a credible v1.0 |
-| `good-first-issue` | Small, well-scoped, good entry point for new contributors |
-| `rule-request` | A request for a new detection pattern |
-| `false-positive` | An existing rule firing on benign code |
-| `docs` | README / CONTRIBUTING / `docs/` / docstrings |
-| `integration` | CI, editors, packaging, GitHub Action |
-| `adoption` | Onboarding UX and "time to first value" |
-| `needs-repro` | Awaiting a reproduction before it is actionable |
-| `out-of-scope` | A non-goal (see above); typically closed with a pointer here |
+| `priority:p0` | Blocks trustworthy execution, policy integrity, or evidence validity |
+| `priority:p1` | Important work sequenced after P0, or required for field validation |
+
+A blocked or evidence-gated idea does **not** earn a priority label just because
+it is attractive.
+
+**Status**
+
+| Label | Meaning |
+|---|---|
+| `status:blocked` | Cannot begin until a named dependency or decision is complete |
+| `status:validation` | Experiment, corpus, benchmark, or evidence-gathering work |
+| `status:maintenance` | Repo quality, CI, contributor, release, or dependency hygiene |
+
+**Evidence and scope**
+
+| Label | Meaning |
+|---|---|
+| `needs-evidence` | Requires user, corpus, benchmark, or comparative evidence before implementation |
+| `rule-candidate` | Candidate detection / change-integrity signal, not an approved rule |
+| `superseded` | Retained only as historical context after consolidation |
+| `out-of-scope` | Deliberately outside the current product boundary (see Non-goals above) |
+
+Keep the existing domain labels (`security`, `reliability`, `testing`,
+`documentation`, `product`, …) where they add signal; avoid a label for every
+subsystem or integration.
 
 > Maintainer note: creating and applying these labels is a repository-admin
-> action. This page is the source of truth for what each label means; the
-> labels themselves are applied to issues over time.
+> action. This page is the source of truth for what each label means; the labels
+> themselves are created and applied to issues over time. A blocked issue title
+> may temporarily use `[Blocked by #NNN]` until the `status:blocked` label is
+> applied.
 
 ## What makes a good VibeGuard rule
 
@@ -120,9 +143,10 @@ propose promotion to core once the pattern and finding IDs are stable.
 
 ## Contributing against this roadmap
 
-A first-time contributor's best entry points: anything labelled
-`good-first-issue`, false-positive reports with a clear repro, and docs.
-Larger work (new rules, integrations) is most likely to land when it matches
-the **Now/Next** focus above. If you want to work on something in **Later**
+A first-time contributor's best entry points: issues labelled
+`status:maintenance` (repo quality, CI, docs, contributor experience),
+false-positive reports with a clear repro, and docs. Larger work (new rules,
+integrations) is most likely to land when it matches the **Now/Next** focus
+above. If you want to work on something in **Later**
 or a **Non-goal**, open an issue first so we can align before you invest
 time. See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for setup and conventions.
