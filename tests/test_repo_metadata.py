@@ -164,9 +164,13 @@ class TestPullRequestTemplate:
         assert "Closes #" in body, "PR template should prompt for `Closes #<issue>`"
 
     def test_lists_verification_commands(self):
-        """The template asks contributors to run the same checks CI runs."""
+        """The template asks contributors to run the full gate CI runs (#261).
+
+        It points at `make ci` (all seven gates) rather than an itemized subset
+        that quietly trains people to skip the drift guards, plus the self-scan.
+        """
         body = PR_TEMPLATE.read_text(encoding="utf-8")
-        for needle in ("pytest", "ruff check", "ruff format", "mypy", "vibeguard gate"):
+        for needle in ("make ci", "vibeguard gate"):
             assert needle in body, f"PR template should mention `{needle}`"
 
 

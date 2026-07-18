@@ -1,4 +1,4 @@
-.PHONY: help install-dev test lint format-check typecheck ci clean demo docs docs-check check-versions bench bench-small bench-medium bench-large bench-scenarios bench-precision bench-precision-check update-goldens
+.PHONY: help install-dev test lint format-check typecheck ci pre-push clean demo docs docs-check check-versions bench bench-small bench-medium bench-large bench-scenarios bench-precision bench-precision-check update-goldens
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -29,6 +29,8 @@ check-versions: ## Fail if README/docs/action version references have drifted
 	python scripts/check_doc_versions.py
 
 ci: lint format-check typecheck docs-check bench-precision-check check-versions test ## Run full CI pipeline locally
+
+pre-push: ci ## Run the full gate before pushing (alias for `ci`; wire as a git pre-push hook)
 
 clean: ## Remove build artifacts
 	rm -rf dist/ build/ *.egg-info .pytest_cache .mypy_cache .coverage htmlcov/ .ruff_cache/ coverage.xml

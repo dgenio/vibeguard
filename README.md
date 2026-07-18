@@ -587,7 +587,8 @@ snippets aligned (`make check-versions` is the automated guard).
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, test commands,
-branch and commit conventions, and how to add a new rule.
+branch and commit conventions, and how to add a new rule. AI coding agents
+working on the codebase should start with [AGENTS.md](AGENTS.md).
 
 For security disclosures, see [SECURITY.md](SECURITY.md) — do not file
 public issues for vulnerabilities.
