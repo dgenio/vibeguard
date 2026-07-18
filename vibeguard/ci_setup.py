@@ -17,6 +17,12 @@ It installs VibeGuard from PyPI (no action tag to drift — see
 The CLI surface is ``vibeguard setup github-actions`` (see :mod:`vibeguard.cli`);
 the logic lives here so it is unit-testable without spawning the CLI, mirroring
 :mod:`vibeguard.scaffold`.
+
+Third-party actions in the generated workflow are pinned to full commit SHAs
+with a trailing version comment (#190), matching the supply-chain standard
+VibeGuard's own workflows hold themselves to. These pins are string literals, so
+this repo's Dependabot cannot bump them — refresh them by hand when the pinned
+action cuts a release (see ``docs/release-checklist.md``).
 """
 
 from __future__ import annotations
@@ -85,11 +91,11 @@ jobs:
   vibeguard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           fetch-depth: 0  # required for --diff (needs the merge base)
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -104,7 +110,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload SARIF to code scanning
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@b7351df727350dca84cb9d725d57dcf5bc82ba26  # v3.37.1
         with:
           sarif_file: vibeguard.sarif
           category: vibeguard
@@ -120,7 +126,7 @@ jobs:
 
       - name: Post / update PR comment
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
         with:
           script: |
             const fs = require("fs");

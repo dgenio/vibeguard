@@ -131,3 +131,18 @@ It is also enforced in CI by
 `tests/test_docs_references.py::TestDocVersionCheck`, alongside the existing
 action-tag-existence guard (`TestGitHubActionDocs`), so this checklist cannot
 quietly rot.
+
+## Pinned GitHub Actions
+
+All third-party actions in `.github/workflows/*.yml` and in `action.yml` are
+pinned to full commit SHAs with a trailing `# vX.Y.Z` comment (#190). The
+`github-actions` entry in `.github/dependabot.yml` keeps those pins fresh —
+Dependabot bumps the SHA and the version comment together.
+
+One set of pins is **not** covered by Dependabot: the workflow template that
+`vibeguard setup github-actions` generates lives as a string literal in
+`vibeguard/ci_setup.py`. Dependabot cannot see it, so when preparing a release,
+refresh those SHAs by hand if the pinned actions (`actions/checkout`,
+`actions/setup-python`, `github/codeql-action`, `actions/github-script`) have cut
+new releases. Resolve the SHA for a tag with
+`git ls-remote https://github.com/<owner>/<repo> <tag>`.

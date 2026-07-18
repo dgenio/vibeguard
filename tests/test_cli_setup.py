@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -86,6 +87,26 @@ class TestRenderWorkflow:
         wf = render_workflow("high")
         assert "pip install vibeguard-gate" in wf
         assert "dgenio/vibeguard@" not in wf
+
+    def test_third_party_actions_are_sha_pinned(self):
+        # #190: every third-party action in the generated workflow must be pinned
+        # to a full 40-char commit SHA with a trailing version comment, never a
+        # floating tag/branch ref — the same standard VibeGuard's own workflows
+        # hold, and what `vibeguard setup github-actions --dry-run` should emit.
+        wf = render_workflow("high")
+        uses_refs = re.findall(r"uses:\s*(\S+)", wf)
+        assert uses_refs, "expected the generated workflow to use at least one action"
+
+        sha_pinned = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
+        floating = re.compile(r"@(v[0-9]|main|master|release/)")
+        for ref in uses_refs:
+            assert sha_pinned.match(ref), f"action is not SHA-pinned: {ref!r}"
+            assert not floating.search(ref), f"action uses a floating ref: {ref!r}"
+
+        # Each pinned line carries a human-readable version comment.
+        for line in wf.splitlines():
+            if "uses:" in line and "@" in line:
+                assert re.search(r"#\s*v\d", line), f"SHA pin missing version comment: {line!r}"
 
 
 class TestResolveFailOn:
