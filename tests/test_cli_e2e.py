@@ -366,7 +366,7 @@ class TestOutputAndReport:
             app, ["scan", "--path", self.pkg_path, "--sarif", "--output", str(dest)]
         )
         assert result.exit_code == 0
-        data = json.loads(dest.read_text())
+        data = json.loads(dest.read_text(encoding="utf-8"))
         assert data["version"] == "2.1.0"
         # stdout must not also carry the SARIF (it went to the file).
         assert "$schema" not in result.stdout
@@ -376,7 +376,7 @@ class TestOutputAndReport:
         runner.invoke(app, ["scan", "--path", self.pkg_path, "--json", "--output", str(dest)])
         stdout_result = runner.invoke(app, ["scan", "--path", self.pkg_path, "--json"])
         # File content equals stdout (modulo the single trailing newline echo adds).
-        assert dest.read_text().rstrip("\n") == stdout_result.stdout.rstrip("\n")
+        assert dest.read_text(encoding="utf-8").rstrip("\n") == stdout_result.stdout.rstrip("\n")
 
     def test_output_dash_means_stdout(self) -> None:
         result = runner.invoke(app, ["scan", "--path", self.pkg_path, "--json", "--output", "-"])
@@ -415,8 +415,8 @@ class TestOutputAndReport:
         )
         # gate still enforces (the node package has high findings).
         assert result.exit_code == 1
-        assert json.loads(sarif.read_text())["version"] == "2.1.0"
-        assert "VibeGuard" in comment.read_text()
+        assert json.loads(sarif.read_text(encoding="utf-8"))["version"] == "2.1.0"
+        assert "VibeGuard" in comment.read_text(encoding="utf-8")
 
     def test_report_rejects_bad_spec(self, tmp_path: Path) -> None:
         result = runner.invoke(app, ["scan", "--path", self.pkg_path, "--report", "sarif"])
@@ -449,5 +449,5 @@ class TestOutputAndReport:
         )
         # exit code depends on findings; the file must be valid JSON regardless.
         assert (tmp_path / "pub.json").exists()
-        data = json.loads((tmp_path / "pub.json").read_text())
+        data = json.loads((tmp_path / "pub.json").read_text(encoding="utf-8"))
         assert "manifest" in data and "result" in data

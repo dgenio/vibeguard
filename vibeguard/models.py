@@ -121,6 +121,15 @@ class Finding(BaseModel):
         description="Optional structured, machine-actionable fix metadata (#238)",
     )
 
+    @field_validator("path", mode="after")
+    @classmethod
+    def _normalize_path_separators(cls, v: str) -> str:
+        # Finding paths are ``/``-separated on every OS (stability contract, #167).
+        # A Windows-produced backslash path would break SARIF consumers and make
+        # baselines/fingerprints non-portable across machines, so normalize at the
+        # model boundary — every rule and reporter inherits the guarantee.
+        return v.replace("\\", "/")
+
     @field_validator("evidence", mode="before")
     @classmethod
     def _truncate_evidence(cls, v: Any) -> Any:

@@ -111,11 +111,11 @@ class Rule(ABC):
         return True
 
     def _rel(self, context: ScanContext, path: Path) -> str:
-        """Return a path relative to the scan root."""
+        """Return a ``/``-separated path relative to the scan root (#167)."""
         try:
-            return str(path.relative_to(context.root))
+            return path.relative_to(context.root).as_posix()
         except ValueError:
-            return str(path)
+            return path.as_posix()
 
 
 # Public alias for plugin authors. Importing from ``vibeguard.api`` is the

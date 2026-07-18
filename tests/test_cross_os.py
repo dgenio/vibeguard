@@ -77,15 +77,21 @@ class TestCrossOsBaseline:
     """A baseline made on one OS must suppress the same finding on another."""
 
     def test_fingerprint_is_separator_stable(self):
-        # The scanner always emits posix paths, so the fingerprint of a finding
-        # is defined purely by that posix string — identical regardless of the
-        # producing OS.
-        assert compute_fingerprint(_make_finding("pkg/sub/secret.py")) == compute_fingerprint(
+        # A Windows-style backslash path and its POSIX form must fingerprint
+        # identically: Finding normalizes separators at the model boundary (#167),
+        # so a baseline created on one OS suppresses the same finding on another.
+        assert compute_fingerprint(_make_finding("pkg\\sub\\secret.py")) == compute_fingerprint(
             _make_finding("pkg/sub/secret.py")
         )
+        # Distinct files still fingerprint differently.
         assert compute_fingerprint(_make_finding("pkg/sub/a.py")) != compute_fingerprint(
             _make_finding("pkg/sub/b.py")
         )
+
+    def test_backslash_path_is_normalized_on_the_model(self):
+        # The normalization is on Finding itself, so it holds on every OS and for
+        # every rule/reporter — not only where the scanner builds the path.
+        assert _make_finding("pkg\\sub\\secret.py").path == "pkg/sub/secret.py"
 
     def test_nested_findings_round_trip_through_baseline(self, tmp_path: Path):
         nested = tmp_path / "pkg" / "sub"
