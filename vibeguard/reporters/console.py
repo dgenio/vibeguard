@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -29,7 +31,38 @@ _GRADE_COLORS = {
     "F": "bold red",
 }
 
-console = Console(stderr=False)
+# Glyphs this reporter emits that a legacy console encoding (e.g. cp1252 on
+# Windows, #167) may be unable to represent: the severity skull, the "no
+# findings" check, and the summary bullet.
+_GLYPH_PROBE = "☠✓•"
+
+
+def _harden_console_encoding(con: Console) -> Console:
+    """Degrade unencodable glyphs instead of crashing the whole report.
+
+    On a console whose encoding cannot represent :data:`_GLYPH_PROBE` (cp1252 and
+    other legacy Windows code pages), Rich would raise ``UnicodeEncodeError``
+    mid-render and abort — turning a routine scan into a traceback (#167). Switch
+    the underlying stream to ``errors="replace"`` so an unrepresentable glyph
+    becomes a placeholder and the findings still print. A UTF-8 console (the
+    common case) encodes the probe fine and is left untouched.
+    """
+    encoding = getattr(con.file, "encoding", None)
+    if not encoding:
+        return con
+    try:
+        _GLYPH_PROBE.encode(encoding)
+    except (UnicodeError, LookupError):
+        reconfigure = getattr(con.file, "reconfigure", None)
+        if callable(reconfigure):
+            # Stream may already hold buffered data or forbid reconfiguration;
+            # if so there is nothing safe to do, so leave it as-is.
+            with contextlib.suppress(ValueError, OSError):
+                reconfigure(errors="replace")
+    return con
+
+
+console = _harden_console_encoding(Console(stderr=False))
 
 
 def build_findings_table(result: ScanResult) -> Table:

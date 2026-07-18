@@ -126,7 +126,11 @@ and add a comment when you must — usually a small refactor is cleaner.
 make ci
 ```
 
-That runs, in order: `lint`, `format-check`, `typecheck`, `test`. If
+That runs, in order: `lint`, `format-check`, `typecheck`, `docs-check`,
+`bench-precision-check`, `check-versions`, `test`. The three middle guards are
+generated-file / doc-drift checks (`docs/rules.md`, `docs/precision-report.md`,
+and cross-doc version references) — they are enforced in GitHub Actions too, so a
+drift that only `make ci` would catch can no longer slip onto `main`. If
 `make ci` is green locally, GitHub Actions almost always is too.
 
 ---

@@ -99,6 +99,11 @@ Think of it as the check between "AI generated this diff" and "this diff reaches
 
 ## Quickstart
 
+**Supported platforms:** Python 3.10–3.14 on Linux, macOS, and Windows. CI runs
+the full interpreter matrix on Linux and a representative 3.12 job on macOS and
+Windows; finding paths are `/`-separated on every OS so baselines and SARIF
+output are portable across machines.
+
 ```bash
 pip install vibeguard-gate
 ```

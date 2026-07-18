@@ -163,6 +163,11 @@ The machine-readable reporters are integration surfaces and are stable:
   guarded by golden snapshot tests (`tests/test_reporters_golden.py`,
   `tests/test_sarif.py`). New fields may be added; existing fields are not
   removed or retyped without a major bump.
+- **Finding `path` values are forward-slash (`/`) separated on every OS**,
+  including Windows. This matches SARIF's `artifactLocation` convention and
+  keeps baselines and fingerprints portable across machines — a baseline
+  created on Linux suppresses the same finding on Windows and vice versa.
+  Guarded by `tests/test_cross_os.py`.
 - The **console (Rich) table** and **Markdown / PR-comment** renderers are
   human-facing. Their *structure* (a severity-sorted table; a PASS/FAIL
   headline that reflects blocking findings) is stable, but exact column
