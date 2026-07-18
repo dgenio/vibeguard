@@ -98,14 +98,17 @@ def test_config_load_handles_deeply_nested_yaml(deep_depth: int, tmp_path: Path)
 @pytest.mark.parametrize(
     "payload",
     [
-        "",  # empty
-        "\x00",  # null byte
-        "\n\n\n",  # whitespace only
-        "key: \xff\xfe",  # encoding edge
-        "policy: balanced\n\t\tfail_on: medium\n",  # tab indentation
-        ":",  # malformed mapping
-        "[1, 2, 3]",  # list root
-        "policy: balanced\n" * 5000,  # very long duplicate
+        pytest.param("", id="empty"),
+        pytest.param("\x00", id="null-byte"),
+        pytest.param("\n\n\n", id="whitespace-only"),
+        pytest.param("key: \xff\xfe", id="encoding-edge"),
+        pytest.param("policy: balanced\n\t\tfail_on: medium\n", id="tab-indentation"),
+        pytest.param(":", id="malformed-mapping"),
+        pytest.param("[1, 2, 3]", id="list-root"),
+        # Explicit id is required: without it pytest derives an ~85 KB node id
+        # from the payload, which overflows Windows' 32767-char limit on the
+        # PYTEST_CURRENT_TEST environment variable and errors at setup (#167).
+        pytest.param("policy: balanced\n" * 5000, id="very-long-duplicate"),
     ],
 )
 def test_config_load_known_pathological_inputs(payload: str, tmp_path: Path) -> None:
