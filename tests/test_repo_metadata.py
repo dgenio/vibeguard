@@ -2,7 +2,7 @@
 
 These guard against silent rot in the `.github/` issue/PR templates and the
 contributor-facing markdown — for example, a renamed rule that leaves a stale
-dropdown option, or a CONTRIBUTING file whose `pip install` line drifts from
+dropdown option, or a CONTRIBUTING file whose install command drifts from
 `pyproject.toml`.
 """
 
@@ -30,8 +30,6 @@ ISSUE_FORM_FILES = [
     "false_positive_report.yml",
 ]
 
-# YAML issue-form body types we expect to see. Anything else likely indicates
-# a typo or use of an unsupported field.
 ALLOWED_BODY_TYPES = {"markdown", "input", "textarea", "dropdown", "checkboxes"}
 
 
@@ -50,8 +48,6 @@ class TestIssueFormConfig:
 
 @pytest.mark.parametrize("filename", ISSUE_FORM_FILES)
 class TestIssueForms:
-    """One copy of each check per issue-form file."""
-
     def _load(self, filename: str) -> dict:
         path = ISSUE_TEMPLATE_DIR / filename
         assert path.exists(), f"Missing .github/ISSUE_TEMPLATE/{filename}"
@@ -82,13 +78,6 @@ class TestIssueForms:
 
 
 class TestRuleDropdownsReferenceRealRules:
-    """Dropdown options that list rule_ids must match RULE_REGISTRY exactly.
-
-    This catches the most common rot: someone renames a rule_id in
-    vibeguard/rules/*.py and forgets that two issue forms hard-code the same
-    list of options.
-    """
-
     @pytest.mark.parametrize(
         ("filename", "dropdown_label_fragment"),
         [
@@ -111,7 +100,6 @@ class TestRuleDropdownsReferenceRealRules:
         )
 
         options = dropdowns[0]["attributes"]["options"]
-        # Strip the "new rule (none of the above)" escape hatch, if present.
         rule_options = {opt for opt in options if not opt.lower().startswith("new rule")}
         registered = set(RULE_REGISTRY.keys())
 
@@ -127,11 +115,6 @@ class TestRuleDropdownsReferenceRealRules:
         )
 
     def test_false_positive_finding_id_placeholder_is_real(self):
-        """The example finding-id placeholder must correspond to a real rule.
-
-        If a finding ID is renamed in the registry, the issue-form placeholder
-        will mislead reporters until updated. This test catches that drift.
-        """
         data = yaml.safe_load(
             (ISSUE_TEMPLATE_DIR / "false_positive_report.yml").read_text(encoding="utf-8")
         )
@@ -164,7 +147,6 @@ class TestPullRequestTemplate:
         assert "Closes #" in body, "PR template should prompt for `Closes #<issue>`"
 
     def test_lists_verification_commands(self):
-        """The template asks contributors to run the same checks CI runs."""
         body = PR_TEMPLATE.read_text(encoding="utf-8")
         for needle in ("pytest", "ruff check", "ruff format", "mypy", "vibeguard gate"):
             assert needle in body, f"PR template should mention `{needle}`"
@@ -179,7 +161,8 @@ class TestContributingDoc:
     def test_install_command_matches_pyproject(self):
         """Avoid recommending an install command that doesn't actually work."""
         body = CONTRIBUTING.read_text(encoding="utf-8")
-        assert 'pip install -e ".[dev]"' in body
+        assert "python -m pip install -e . --group dev" in body
+        assert 'pip install -e ".[dev]"' not in body
 
     def test_lists_core_dev_commands(self):
         body = CONTRIBUTING.read_text(encoding="utf-8")
@@ -193,8 +176,6 @@ class TestContributingDoc:
 
 
 class TestReadmeQuickReference:
-    """Light sanity checks on the README that guard the documented contract."""
-
     def test_quick_reference_lists_every_registered_rule(self):
         body = README.read_text(encoding="utf-8")
         for rule_id in RULE_REGISTRY:
@@ -208,17 +189,12 @@ class TestReadmeQuickReference:
         """The PyPI distribution name is `vibeguard-gate`, not `vibeguard`."""
         body = README.read_text(encoding="utf-8")
         assert "pip install vibeguard-gate" in body
-        # The bare `pip install vibeguard` form (i.e. not followed by `-gate`)
-        # silently installs the wrong package — guard against it reappearing.
-        # The pattern catches the most common installer invocations
-        # (pip, pip3, `python -m pip`, `python3 -m pip`); the negative
-        # lookahead permits `vibeguard-gate` with any suffix
-        # (e.g. `==0.6.0`, `[extra]`, trailing whitespace).
         bare_form = re.compile(r"\b(?:pip3?|python3?\s+-m\s+pip)\s+install\s+vibeguard\b(?!-gate)")
         for line in body.splitlines():
             stripped = line.strip()
             if bare_form.search(stripped):
-                # Allow editable from-source install: `pip install -e ".[dev]"`.
+                # Allow editable from-source install commands, including PEP 735
+                # group-based contributor setup.
                 assert "-e" in stripped, (
                     f"README has a literal `pip install vibeguard` line "
                     f"(should be `vibeguard-gate`): {line!r}"
