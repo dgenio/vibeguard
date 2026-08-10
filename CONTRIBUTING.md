@@ -39,6 +39,8 @@ the roadmap. Maintainers cutting a release should follow
 - **Python 3.10 or newer.** CI tests the full matrix 3.10 → 3.14, plus a
   floor-deps job that resolves the minimum declared direct dependency versions
   from `pyproject.toml` with uv `lowest-direct` on 3.10.
+- **pip 25.1 or newer** for local PEP 735 dependency-group installation. The
+  command below upgrades pip before using `--group`.
 - **git** with a clone of the repository.
 - Recommended: a fresh virtual environment (`python -m venv .venv && source .venv/bin/activate`)
   or a tool like [`pyenv`](https://github.com/pyenv/pyenv) /
@@ -49,12 +51,15 @@ the roadmap. Maintainers cutting a release should follow
 From the repo root:
 
 ```bash
-pip install -e ".[dev]"
+python -m pip install --upgrade pip
+python -m pip install -e . --group dev
 ```
 
-This installs VibeGuard in editable mode along with the dev tooling
-(`pytest`, `pytest-cov`, `ruff`, `mypy`, `types-PyYAML`). The CLI is then
-available as `vibeguard`.
+This installs VibeGuard in editable mode plus the local PEP 735 `dev`
+dependency group (`pytest`, `pytest-cov`, `ruff`, `mypy`, `types-PyYAML`,
+etc.). The group is contributor/CI tooling only and is **not published as an
+optional dependency of the VibeGuard wheel**. The CLI is then available as
+`vibeguard`.
 
 Verify the install:
 
