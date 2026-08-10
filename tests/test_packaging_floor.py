@@ -8,9 +8,8 @@ dependency metadata must stay friendly to adopters:
   and no speculative upper-bound caps;
 * the advertised Python range (``requires-python`` + trove classifiers)
   covers 3.10 → 3.14 inclusive;
-* ``constraints-min.txt`` stays in lockstep with the declared lower
-  bounds, so the CI "floor deps" job actually exercises the versions we
-  promise to support.
+* ``pyproject.toml`` is the single source of truth for dependency floors. The
+  CI floor job resolves those declarations directly with uv ``lowest-direct``.
 
 These are unit-level guards; the floor job in ``.github/workflows/ci.yml``
 provides the runtime proof that the lower bounds resolve and pass.
@@ -23,13 +22,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
-CONSTRAINTS_MIN = REPO_ROOT / "constraints-min.txt"
 
-# Python versions VibeGuard advertises support for (inclusive).
 EXPECTED_PYTHONS = ("3.10", "3.11", "3.12", "3.13", "3.14")
 
-# ``name (op version) [; marker]`` — enough to pull the package name, the
-# comparator, and the version out of a PEP 508 requirement string.
 _REQ_RE = re.compile(
     r"^(?P<name>[A-Za-z0-9._-]+)\s*(?P<op>[<>=!~]+)\s*(?P<version>[^;,\s]+)(?P<rest>.*)$"
 )
@@ -47,64 +42,26 @@ def _runtime_requirements() -> list[str]:
     return _load_pyproject()["project"]["dependencies"]
 
 
-def _parse_constraints() -> dict[str, str]:
-    """Map ``name -> pinned version`` from constraints-min.txt."""
-    pins: dict[str, str] = {}
-    for raw in CONSTRAINTS_MIN.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        m = _REQ_RE.match(line)
-        assert m, f"Unparseable constraint line: {line!r}"
-        assert m.group("op") == "==", (
-            f"constraints-min.txt must pin exact floors with `==`, got {line!r}"
-        )
-        pins[m.group("name").lower()] = m.group("version")
-    return pins
-
-
 class TestDependencyPolicy:
     def test_runtime_deps_use_lower_bounds_only(self):
-        """No exact pins and no upper-bound caps in runtime dependencies."""
+        """Every runtime dependency exposes one parseable >= floor and no cap."""
         offenders: list[str] = []
         for req in _runtime_requirements():
-            # Split off any environment marker before inspecting comparators.
             spec = req.split(";", 1)[0]
+            match = _REQ_RE.match(req)
+            if match is None:
+                offenders.append(f"{req} (unparseable requirement)")
+                continue
             if "==" in spec:
                 offenders.append(f"{req} (exact pin)")
             if "<" in spec:
                 offenders.append(f"{req} (upper-bound cap)")
-            if ">=" not in spec:
-                offenders.append(f"{req} (missing >= lower bound)")
+            if match.group("op") != ">=":
+                offenders.append(f"{req} (must declare a >= floor)")
         assert not offenders, (
             "Runtime dependencies must be lower-bound-only (see #121). "
             "Any retained cap needs an inline comment citing the specific "
             f"incompatibility. Offenders: {offenders}"
-        )
-
-    def test_constraints_min_matches_declared_lower_bounds(self):
-        """Every runtime ``>=X`` must be pinned to ``==X`` in constraints-min.txt."""
-        pins = _parse_constraints()
-        declared: dict[str, str] = {}
-        for req in _runtime_requirements():
-            m = _REQ_RE.match(req)
-            assert m, f"Unparseable dependency: {req!r}"
-            declared[m.group("name").lower()] = m.group("version")
-
-        missing = sorted(set(declared) - set(pins))
-        extra = sorted(set(pins) - set(declared))
-        assert not missing, (
-            f"constraints-min.txt is missing floor pins for: {missing}. "
-            "Add them so the floor CI job exercises the declared lower bounds."
-        )
-        assert not extra, f"constraints-min.txt pins packages not in runtime deps: {extra}."
-
-        mismatched = {
-            name: (declared[name], pins[name]) for name in declared if declared[name] != pins[name]
-        }
-        assert not mismatched, (
-            "constraints-min.txt floors drifted from pyproject lower bounds "
-            f"(declared vs pinned): {mismatched}"
         )
 
 
