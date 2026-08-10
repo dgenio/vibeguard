@@ -10,7 +10,7 @@
 # Keep this file in lockstep with pyproject.toml: tests/test_packaging_floor.py
 # fails if a declared lower bound has no matching pin here (or vice versa).
 typer==0.16.0
-rich==13.0.0
+rich==15.0.0
 pydantic==2.0.0
 pyyaml==6.0
 pathspec==0.12.0
