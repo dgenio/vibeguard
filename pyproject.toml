@@ -30,8 +30,8 @@ classifiers = [
 # not force version conflicts on adopters. Runtime deps therefore use
 # lower bounds only (``>=``) — no exact pins (``==``) and no speculative
 # upper-bound caps. Any cap added later must carry an inline comment citing
-# the specific incompatibility. The ``constraints-min.txt`` floor job in CI
-# proves these lower bounds actually resolve and pass the suite.
+# the specific incompatibility. The floor CI job resolves these declarations
+# directly with uv ``lowest-direct`` and proves the resulting suite passes.
 dependencies = [
     # typer<0.16 can't build CLI options annotated ``X | None`` and pulls a
     # click whose CliRunner mixes stderr into stdout; the floor job proves
