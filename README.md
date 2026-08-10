@@ -108,7 +108,7 @@ Or from source:
 ```bash
 git clone https://github.com/dgenio/vibeguard
 cd vibeguard
-pip install -e ".[dev]"
+python -m pip install -e . --group dev
 ```
 
 Initialize a config file:

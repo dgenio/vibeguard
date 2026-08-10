@@ -50,8 +50,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = []
 
-# PEP 735 local-only tooling. Unlike an optional dependency extra, this group
-# is not published in the wheel metadata and is only for contributors / CI.
+# PEP 735 local-only tooling. This dependency group is not published in wheel
+# metadata and is only for contributors / CI. The separate `dev` optional extra
+# above is intentionally empty and exists only as a backward-compatibility shim.
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
