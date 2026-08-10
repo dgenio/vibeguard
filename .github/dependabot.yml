@@ -1,8 +1,8 @@
 version: 2
 
-# VibeGuard is a Python library. pyproject.toml is the compatibility contract;
-# routine updates should not silently raise declared lower bounds just because a
-# newer release exists. CI proves both minimum and newest dependency sets.
+# VibeGuard is a published Python library. pyproject.toml is the compatibility
+# contract; floor/latest CI proves the range. Routine bot PRs must not rewrite
+# public dependency floors merely because newer versions exist.
 updates:
   - package-ecosystem: pip
     directory: "/"
@@ -11,28 +11,16 @@ updates:
       day: monday
       time: "06:00"
       timezone: Etc/UTC
-    open-pull-requests-limit: 5
-    cooldown:
-      default-days: 7
+    open-pull-requests-limit: 0
     groups:
-      python-nonmajor:
-        applies-to: version-updates
-        patterns:
-          - "*"
-        update-types:
-          - minor
-          - patch
-      python-security-nonmajor:
+      python-security:
         applies-to: security-updates
         patterns:
           - "*"
-        update-types:
-          - minor
-          - patch
     labels:
       - dependencies
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "fix(deps)"
 
   - package-ecosystem: github-actions
     directory: "/"
