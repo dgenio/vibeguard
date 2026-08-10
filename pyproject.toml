@@ -5,12 +5,24 @@ build-backend = "hatchling.build"
 [project]
 name = "vibeguard-gate"
 version = "0.10.0"
-description = "Guardrails for vibe-coded software — a pre-merge safety gate for AI-generated changes"
+description = "Offline change-integrity scanner and evidence gate for AI-assisted software changes"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "VibeGuard Contributors" }]
-keywords = ["security", "ai", "code-review", "static-analysis", "devtools"]
+keywords = [
+    "security",
+    "ai",
+    "ai-coding",
+    "vibe-coding",
+    "coding-agents",
+    "code-review",
+    "change-integrity",
+    "supply-chain-security",
+    "devsecops",
+    "static-analysis",
+    "devtools",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
