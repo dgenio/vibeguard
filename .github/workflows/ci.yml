@@ -34,11 +34,6 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          # No-op for versions with a stable toolcache entry; lets newer
-          # interpreters (e.g. 3.14 during the window where only an RC is
-          # cached) resolve instead of failing the run. We keep 3.14 a hard
-          # gate — issue #121 wants CI green on 3.10-3.14 — rather than
-          # marking it continue-on-error.
           allow-prereleases: true
           cache: pip
           cache-dependency-path: pyproject.toml
@@ -46,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e . --group dev
 
       - name: Lint with ruff
         run: ruff check vibeguard/ tests/ benchmarks/
@@ -86,12 +81,8 @@ jobs:
       - name: Install uv
         run: python -m pip install uv
 
-      # Resolve every direct requirement to the lower bound declared in
-      # pyproject.toml. This removes the second, hand-maintained source of truth
-      # that constraints-min.txt used to duplicate while preserving the same
-      # runtime proof that each >= floor is truthful.
       - name: Install declared minimum dependency versions
-        run: uv pip install --system --resolution lowest-direct -e ".[dev]"
+        run: uv pip install --system --resolution lowest-direct -e . --group dev
 
       - name: Show resolved floor versions
         run: pip list
@@ -104,9 +95,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    # Scheduled / on-demand only: newest deps (incl. pre-releases) catch a
-    # breaking upstream release early. Allowed to fail so it never blocks a
-    # PR — it's an early-warning signal, not a gate (#121).
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     continue-on-error: true
 
@@ -124,7 +112,7 @@ jobs:
       - name: Install with newest (pre-release) dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e . --group dev
           pip install --pre --upgrade typer rich pydantic pyyaml pathspec
 
       - name: Show resolved versions
@@ -152,10 +140,6 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build --wheel
 
-      # Prove the "frictionless, no forced pins" promise: VibeGuard's wheel
-      # co-installs cleanly into an env that already carries common stacks
-      # (which themselves depend on click/pydantic/typing-extensions). A
-      # clean exit means the resolver found a compatible set (#121).
       - name: Co-install alongside common stacks
         run: |
           python -m venv /tmp/coinstall
@@ -167,12 +151,6 @@ jobs:
       - name: Smoke-test the pre-commit hook
         run: |
           pip install pre-commit
-          # `try-repo` wires this repo's .pre-commit-hooks.yaml into a
-          # throwaway config, builds the hook's isolated `language: python`
-          # environment (the resolver check) and runs it end-to-end. We use
-          # the informational `vibeguard-scan` hook, which always exits 0, so
-          # this proves the hook installs and runs without coupling the smoke
-          # test to whether this repo happens to be clean at --fail-on high.
           pre-commit try-repo . vibeguard-scan --all-files --verbose
 
   vibeguard-self-check:
@@ -195,7 +173,9 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install VibeGuard
-        run: pip install -e ".[dev]"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . --group dev
 
       - name: Run VibeGuard gate
         run: vibeguard gate --path . --fail-on critical
@@ -220,36 +200,17 @@ jobs:
       - name: Install VibeGuard
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          python -m pip install -e . --group dev
 
-      # Unit-level enforcement lives in the test job (pytest runs with
-      # ``--disable-socket``, #223). This job is the integration proof: run the
-      # core commands as real subprocesses inside a network namespace with **no**
-      # connectivity, catching any network use that in-process socket patching
-      # could miss (subprocess children, C-level sockets). ``sudo unshare --net``
-      # uses real root, so it needs no unprivileged-userns support (restricted on
-      # newer Ubuntu images); the console script's absolute shebang makes it
-      # runnable as root without PATH juggling. The commands do pure local file
-      # I/O, so exit 2 (operational error) here would mean an unexpected network
-      # dependency — that is the failure this job exists to surface.
       - name: Run core commands with networking disabled
         run: |
           set -x
           VG="$(command -v vibeguard)"
-
-          # Preflight: prove the sandbox itself works. If 'sudo unshare --net' is
-          # blocked/unsupported on the runner it commonly exits non-zero — catch
-          # that here and fail loudly, so it can never be misread as a command's
-          # "blocking findings" (exit 1) in the checks below.
           if ! sudo unshare --net -- true; then
             echo "::error::'sudo unshare --net' is unavailable on this runner; cannot enforce the no-network job"
             exit 1
           fi
-
           fail=0
-          # $1 = label, $2 = accepted exit codes (space-separated), rest = argv.
-          # ``|| rc=$?`` keeps the runner's default ``bash -e`` from aborting on a
-          # command's expected non-zero (gate/publish-check block on findings).
           run_offline() {
             local name="$1" accept="$2"; shift 2
             local rc=0
@@ -259,11 +220,6 @@ jobs:
               fail=1
             fi
           }
-          # Per-command expected codes: scan/explain are informational and must
-          # succeed (0); gate/publish-check may block on findings (0 or 1). Any
-          # other code — especially 2 (operational error) — under no network
-          # signals an unexpected network dependency, which is what this job exists
-          # to surface.
           run_offline scan "0" scan --path examples/vulnerable-python-package
           run_offline gate "0 1" gate --path examples/vulnerable-python-package --fail-on critical
           run_offline publish-check "0 1" publish-check --path examples/vulnerable-python-package
