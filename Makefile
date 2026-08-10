@@ -4,8 +4,9 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
-install-dev: ## Install package in editable mode with dev deps
-	pip install -e ".[dev]"
+install-dev: ## Install package in editable mode with local dev tooling
+	python -m pip install --upgrade pip
+	python -m pip install -e . --group dev
 
 test: ## Run tests with coverage
 	pytest tests/ -v --cov=vibeguard --cov-report=term-missing --cov-report=xml
