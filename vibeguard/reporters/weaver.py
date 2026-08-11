@@ -15,10 +15,12 @@ A vendored copy of the schema lives at
 ``docs/weaver/artifact_safety_report.schema.json`` for offline validation; the
 field mapping is documented in ``docs/interop-lessons.md``.
 
-Note: weaver-spec has no ``FailureCaseArtifact`` (the name used in issue #120).
-``ArtifactSafetyReport`` is the canonical contract for the output of an
-artifact safety gate and is a direct fit for VibeGuard, which *is* a dev-time
-artifact safety gate.
+weaver-spec also defines a distinct ``FailureCaseArtifact`` Extended contract.
+VibeGuard intentionally emits ``ArtifactSafetyReport`` here because this
+reporter represents the direct output of an artifact safety gate.
+``FailureCaseArtifact`` is a separate downstream failure/replay artifact and
+should not replace the report format without a deliberate interoperability
+design change.
 """
 
 from __future__ import annotations
