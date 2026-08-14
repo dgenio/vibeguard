@@ -91,18 +91,26 @@ class Disposition(BaseModel):
             raise ValueError("an accepted disposition cannot also have rejection_reason")
         if self.status != DispositionStatus.ACTIVE and not self.reason.strip():
             raise ValueError("non-active dispositions require a non-empty reason")
-        if self.expires_at is not None and self.expires_at <= self.created_at:
-            raise ValueError("expires_at must be later than created_at")
+        if self.expires_at is not None:
+            created = _as_aware_utc(self.created_at)
+            expires = _as_aware_utc(self.expires_at)
+            if expires <= created:
+                raise ValueError("expires_at must be later than created_at")
         return self
 
     def is_expired(self, *, at: datetime | None = None) -> bool:
         """Return whether this disposition has expired at *at* (UTC now by default)."""
         if self.expires_at is None:
             return False
-        now = at if at is not None else datetime.now(timezone.utc)
-        if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
-        return now >= self.expires_at
+        now = _as_aware_utc(at if at is not None else datetime.now(timezone.utc))
+        return now >= _as_aware_utc(self.expires_at)
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    """Normalize a datetime to timezone-aware UTC for safe comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 class FindingRecord(BaseModel):
@@ -123,8 +131,8 @@ class FindingRecord(BaseModel):
 
     @property
     def effective_status(self) -> DispositionStatus:
-        """Return the lifecycle state without deleting the underlying occurrence."""
-        if self.disposition is None:
+        """Return the authoritative lifecycle state without deleting evidence."""
+        if self.disposition is None or not self.disposition.accepted:
             return DispositionStatus.ACTIVE
         if self.disposition.is_expired():
             return DispositionStatus.EXPIRED
@@ -141,6 +149,7 @@ def baseline_record(
     *,
     created_at: datetime,
     reason: str = "carried by repository baseline",
+    authority: DispositionAuthority | None = None,
     owner: str | None = None,
     reviewer: str | None = None,
     source_commit: str | None = None,
@@ -150,14 +159,14 @@ def baseline_record(
 ) -> FindingRecord:
     """Return *finding* with a separate baseline disposition.
 
-    The finding object is preserved byte-for-byte at the model level. A caller
-    may mark the disposition unaccepted when authority/same-change validation
-    rejects it; in that case the occurrence remains actionable.
+    Authority is never inferred from the mere existence of a baseline entry.
+    Callers must propagate whatever authority evidence was actually recorded;
+    the integrity policy can then decide whether it is sufficient.
     """
     disposition = Disposition(
         status=DispositionStatus.BASELINED,
         source=DispositionSource.BASELINE,
-        authority=DispositionAuthority.MAINTAINER if accepted else None,
+        authority=authority,
         owner=owner,
         reviewer=reviewer,
         reason=reason,
@@ -167,21 +176,7 @@ def baseline_record(
         accepted=accepted,
         rejection_reason=rejection_reason,
     )
-    if not accepted:
-        # A rejected exception is evidence about an attempted disposition, not
-        # permission to hide the finding. ``effective_status`` therefore treats
-        # only accepted non-active dispositions as authoritative.
-        return RejectedFindingRecord(finding=finding, disposition=disposition)
     return FindingRecord(finding=finding, disposition=disposition)
-
-
-class RejectedFindingRecord(FindingRecord):
-    """Finding record carrying a rejected/non-authoritative disposition attempt."""
-
-    @property
-    def effective_status(self) -> DispositionStatus:
-        """Rejected dispositions never deactivate the finding occurrence."""
-        return DispositionStatus.ACTIVE
 
 
 DispositionDecision = Literal["accepted", "rejected", "expired", "none"]
@@ -191,9 +186,11 @@ def disposition_decision(record: FindingRecord) -> DispositionDecision:
     """Return a stable machine-oriented decision label for evidence output."""
     if record.disposition is None:
         return "none"
+    if not record.disposition.accepted:
+        return "rejected"
     if record.disposition.is_expired():
         return "expired"
-    return "accepted" if record.disposition.accepted else "rejected"
+    return "accepted"
 
 
 __all__ = [
@@ -203,7 +200,6 @@ __all__ = [
     "DispositionSource",
     "DispositionStatus",
     "FindingRecord",
-    "RejectedFindingRecord",
     "baseline_record",
     "disposition_decision",
 ]
