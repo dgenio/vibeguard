@@ -2,6 +2,8 @@
 
 VibeGuard is a security-focused pre-merge safety gate, so responsible vulnerability reporting matters. This policy explains which versions and findings are in scope, how to report issues privately, and what information helps maintainers triage quickly.
 
+For the security boundaries and exact guarantees/non-guarantees of the Trustworthy Observe work, see the [normative threat model](docs/threat-model.md). In particular, a complete or no-findings scan is **not** a certification that a change is secure.
+
 ## Supported versions
 
 VibeGuard is currently pre-1.0. Security fixes are handled for:
