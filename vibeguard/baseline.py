@@ -1,4 +1,9 @@
-"""Baseline file support for suppressing existing findings."""
+"""Baseline file support for classifying existing findings.
+
+Legacy callers may still use :func:`filter_baselined`, but governed/native
+evidence should use :func:`record_baselined` so a baseline changes disposition
+state without deleting the underlying finding occurrence (issue #132).
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from vibeguard.dispositions import FindingRecord, baseline_record
 from vibeguard.models import Finding
 
 
@@ -17,11 +23,34 @@ class BaselineLoadError(Exception):
 
 
 class BaselineEntry(BaseModel):
-    """A single entry in the baseline file."""
+    """A single entry in the baseline file.
+
+    The original v1 fields remain valid. Optional governance metadata is additive
+    so existing baseline files keep loading while new files can preserve the
+    review trail needed by governed dispositions.
+    """
 
     rule_id: str
     path: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    reason: str = "carried by repository baseline"
+    owner: str | None = None
+    reviewer: str | None = None
+    source_commit: str | None = None
+    config_digest: str | None = None
+
+    def created_datetime(self) -> datetime:
+        """Return ``created_at`` as a timezone-aware datetime."""
+        text = self.created_at
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            value = datetime.fromisoformat(text)
+        except ValueError as exc:
+            raise BaselineLoadError(f"baseline created_at is not valid ISO-8601: {self.created_at!r}") from exc
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
 
 
 class Baseline(BaseModel):
@@ -53,7 +82,7 @@ class Baseline(BaseModel):
             ) from exc
 
     def save(self, path: Path) -> None:
-        """Save the baseline to a JSON file."""
+        """Save a baseline to a JSON file."""
         path.write_text(
             json.dumps(self.model_dump(mode="json"), indent=2, default=str) + "\n",
             encoding="utf-8",
@@ -68,9 +97,8 @@ def compute_fingerprint(finding: Finding) -> str:
     """Compute a stable fingerprint for a finding.
 
     Thin wrapper around ``Finding.fingerprint`` (the same algorithm) so the
-    baseline file, SARIF ``partialFingerprints``, the diagnostics reporter,
-    and ``model_dump`` JSON all share one identity definition. See
-    ``Finding.fingerprint`` for the algorithm.
+    baseline file, SARIF ``partialFingerprints``, diagnostics reporter, and
+    ``model_dump`` JSON all share one identity definition.
     """
     return finding.fingerprint
 
@@ -88,6 +116,59 @@ def create_baseline(findings: list[Finding]) -> Baseline:
     return Baseline(entries=entries)
 
 
+def record_baselined(
+    findings: list[Finding],
+    baseline: Baseline,
+    *,
+    accepted: bool = True,
+    rejection_reason: str | None = None,
+) -> list[FindingRecord]:
+    """Return every finding with any matching baseline as a separate disposition.
+
+    Unlike :func:`filter_baselined`, this function never removes an occurrence.
+    ``accepted=False`` records that a baseline entry was present but was not
+    authoritative (for example because `integrity` detected same-change policy
+    weakening); the finding then remains active.
+    """
+    records: list[FindingRecord] = []
+    for finding in findings:
+        entry = baseline.entries.get(compute_fingerprint(finding))
+        if entry is None:
+            records.append(FindingRecord(finding=finding))
+            continue
+        records.append(
+            baseline_record(
+                finding,
+                created_at=entry.created_datetime(),
+                reason=entry.reason,
+                owner=entry.owner,
+                reviewer=entry.reviewer,
+                source_commit=entry.source_commit,
+                config_digest=entry.config_digest,
+                accepted=accepted,
+                rejection_reason=rejection_reason,
+            )
+        )
+    return records
+
+
 def filter_baselined(findings: list[Finding], baseline: Baseline) -> list[Finding]:
-    """Remove findings that are present in the baseline."""
+    """Legacy actionable-only view of findings not present in the baseline.
+
+    This function is retained for compatibility with current CLI behavior while
+    #132 is wired through every output surface. It is **not** the native evidence
+    representation: governed consumers should call :func:`record_baselined` and
+    retain all occurrences.
+    """
     return [f for f in findings if not baseline.contains(compute_fingerprint(f))]
+
+
+__all__ = [
+    "Baseline",
+    "BaselineEntry",
+    "BaselineLoadError",
+    "compute_fingerprint",
+    "create_baseline",
+    "filter_baselined",
+    "record_baselined",
+]
