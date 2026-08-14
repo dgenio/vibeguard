@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from vibeguard.dispositions import FindingRecord, baseline_record
+from vibeguard.dispositions import DispositionAuthority, FindingRecord, baseline_record
 from vibeguard.models import Finding
 
 
@@ -27,13 +27,15 @@ class BaselineEntry(BaseModel):
 
     The original v1 fields remain valid. Optional governance metadata is additive
     so existing baseline files keep loading while new files can preserve the
-    review trail needed by governed dispositions.
+    review trail needed by governed dispositions. ``authority`` is evidence,
+    never inferred from the fact that an entry exists.
     """
 
     rule_id: str
     path: str
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     reason: str = "carried by repository baseline"
+    authority: DispositionAuthority | None = None
     owner: str | None = None
     reviewer: str | None = None
     source_commit: str | None = None
@@ -47,7 +49,9 @@ class BaselineEntry(BaseModel):
         try:
             value = datetime.fromisoformat(text)
         except ValueError as exc:
-            raise BaselineLoadError(f"baseline created_at is not valid ISO-8601: {self.created_at!r}") from exc
+            raise BaselineLoadError(
+                f"baseline created_at is not valid ISO-8601: {self.created_at!r}"
+            ) from exc
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value
@@ -127,7 +131,7 @@ def record_baselined(
 
     Unlike :func:`filter_baselined`, this function never removes an occurrence.
     ``accepted=False`` records that a baseline entry was present but was not
-    authoritative (for example because `integrity` detected same-change policy
+    authoritative (for example because ``integrity`` detected same-change policy
     weakening); the finding then remains active.
     """
     records: list[FindingRecord] = []
@@ -141,6 +145,7 @@ def record_baselined(
                 finding,
                 created_at=entry.created_datetime(),
                 reason=entry.reason,
+                authority=entry.authority,
                 owner=entry.owner,
                 reviewer=entry.reviewer,
                 source_commit=entry.source_commit,
