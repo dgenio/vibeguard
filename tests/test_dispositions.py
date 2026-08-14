@@ -53,7 +53,7 @@ def test_baseline_preserves_occurrence_and_records_disposition() -> None:
         }
     )
 
-    records = record_baselined([finding], baseline)
+    records = record_baselined([finding], baseline, accepted=True)
 
     assert len(records) == 1
     record = records[0]
@@ -81,13 +81,13 @@ def test_legacy_baseline_does_not_invent_authority() -> None:
         }
     )
 
-    record = record_baselined([finding], baseline)[0]
+    record = record_baselined([finding], baseline, accepted=True)[0]
 
     assert record.disposition is not None
     assert record.disposition.authority is None
     assert record.effective_status == DispositionStatus.BASELINED
-    # The compatibility view may still accept this record; a future integrity
-    # policy must separately require sufficient recorded authority.
+    # A caller may deliberately preserve legacy compatibility, but the evidence
+    # remains explicit that no authority was recorded for a future integrity gate.
     assert disposition_decision(record) == "accepted"
 
 
@@ -120,7 +120,7 @@ def test_rejected_baseline_attempt_does_not_deactivate_finding() -> None:
 
 def test_missing_baseline_entry_is_active_and_still_present() -> None:
     finding = _finding()
-    record = record_baselined([finding], Baseline())[0]
+    record = record_baselined([finding], Baseline(), accepted=False)[0]
 
     assert isinstance(record, FindingRecord)
     assert record.finding == finding
