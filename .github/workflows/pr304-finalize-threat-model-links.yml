@@ -1,0 +1,84 @@
+name: PR304 finalize threat-model navigation
+
+on:
+  push:
+    branches:
+      - docs/threat-model-232
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: docs/threat-model-232
+          fetch-depth: 0
+
+      - name: Add canonical threat-model navigation and review gate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected anchor exactly once, found {count}")
+              p.write_text(text.replace(old, new), encoding="utf-8")
+
+          replace_once(
+              "README.md",
+              "[![Read the Weaver Stack overview on Towards AI](https://img.shields.io/badge/Read_the_overview-Towards_AI-black?logo=medium&logoColor=white)](https://pub.towardsai.net/the-weaver-stack-one-contract-layer-for-safe-llm-agents-7f733cad5eac)\n\n---",
+              "[![Read the Weaver Stack overview on Towards AI](https://img.shields.io/badge/Read_the_overview-Towards_AI-black?logo=medium&logoColor=white)](https://pub.towardsai.net/the-weaver-stack-one-contract-layer-for-safe-llm-agents-7f733cad5eac)\n\nSecurity boundary: read the [normative Trustworthy Observe threat model](docs/threat-model.md) for the exact guarantees, non-guarantees, trust assumptions, and residual-risk policy. A complete or no-findings run is **not** a security certification.\n\n---",
+          )
+
+          replace_once(
+              "docs/stability-contract.md",
+              "> Enforcement: the promises below are executable. A dedicated contract suite,\n> [`tests/test_stability_contract.py`](../tests/test_stability_contract.py),\n> pins the exit codes, the `scan`-vs-`gate` split, fail-closed behaviour,\n> output-schema keys, finding-ID set, fingerprint algorithm, and output\n> ordering — so the document and the binary cannot silently disagree. An\n> *intentional* contract change must update the doc and that suite together.\n",
+              "> Enforcement: the promises below are executable. A dedicated contract suite,\n> [`tests/test_stability_contract.py`](../tests/test_stability_contract.py),\n> pins the exit codes, the `scan`-vs-`gate` split, fail-closed behaviour,\n> output-schema keys, finding-ID set, fingerprint algorithm, and output\n> ordering — so the document and the binary cannot silently disagree. An\n> *intentional* contract change must update the doc and that suite together.\n\n> Security semantics for Trustworthy Observe are governed by the\n> [normative threat model](threat-model.md). The stability contract must not be\n> read as a stronger claim: a complete run or no findings is not proof that a\n> change is secure.\n",
+          )
+
+          replace_once(
+              "CONTRIBUTING.md",
+              "- **[docs/stability-contract.md](docs/stability-contract.md)** — the\n  promises core rules and outputs carry, so you know what counts as a\n  breaking change.\n",
+              "- **[docs/stability-contract.md](docs/stability-contract.md)** — the\n  promises core rules and outputs carry, so you know what counts as a\n  breaking change.\n- **[docs/threat-model.md](docs/threat-model.md)** — the normative security\n  boundaries, guarantees/non-guarantees, trust assumptions, and residual-risk\n  policy for Trustworthy Observe.\n",
+          )
+
+          replace_once(
+              "CONTRIBUTING.md",
+              "Maintainers cutting a release should follow\n[docs/release-checklist.md](docs/release-checklist.md).\n\n---\n\n## Prerequisites",
+              "Maintainers cutting a release should follow\n[docs/release-checklist.md](docs/release-checklist.md).\n\n### Threat-model review gate\n\nAny change to **scope resolution, policy/configuration, suppressions, baselines,\nplugin trust, execution/completeness status, evidence/report semantics, or CI\nintegration/permissions** must review and update the normative\n[threat model](docs/threat-model.md) in the same PR when the security boundary,\nmitigation, residual risk, evidence signal, or review cadence changes. Do not\nmerge such a change on the assumption that existing threat-model wording still\napplies; make that review explicit in the PR.\n\n---\n\n## Prerequisites",
+          )
+
+          Path("tests/test_threat_model_docs.py").write_text(
+              '''"""Documentation contract for the normative Trustworthy Observe threat model (#232)."""\n\nfrom pathlib import Path\n\n\nROOT = Path(__file__).resolve().parents[1]\n\n\ndef _text(path: str) -> str:\n    return (ROOT / path).read_text(encoding="utf-8")\n\n\ndef test_normative_threat_model_is_linked_from_required_surfaces() -> None:\n    assert "docs/threat-model.md" in _text("README.md")\n    assert "docs/threat-model.md" in _text("SECURITY.md")\n    assert "threat-model.md" in _text("docs/stability-contract.md")\n    assert "docs/threat-model.md" in _text("CONTRIBUTING.md")\n\n\ndef test_contributor_guidance_requires_security_boundary_review() -> None:\n    contributing = _text("CONTRIBUTING.md")\n    for term in (\n        "scope resolution",\n        "policy/configuration",\n        "suppressions",\n        "baselines",\n        "plugin trust",\n        "execution/completeness status",\n        "evidence/report semantics",\n        "CI integration/permissions",\n    ):\n        assert term in contributing\n\n\ndef test_threat_model_keeps_no_findings_non_certification_boundary() -> None:\n    threat_model = _text("docs/threat-model.md").lower()\n    assert "no findings does not mean no vulnerabilities" in threat_model\n    assert "does not attempt to prove that code is secure" in threat_model\n''',
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Sanity-check documentation contract
+        run: |
+          python -m compileall -q tests/test_threat_model_docs.py
+          python - <<'PY'
+          from pathlib import Path
+          required = ["README.md", "SECURITY.md", "docs/stability-contract.md", "CONTRIBUTING.md"]
+          for path in required:
+              text = Path(path).read_text(encoding="utf-8")
+              if "threat-model.md" not in text:
+                  raise SystemExit(f"missing threat-model link in {path}")
+          PY
+          git diff --check
+
+      - name: Commit finalized documentation and remove helper workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/stability-contract.md CONTRIBUTING.md tests/test_threat_model_docs.py
+          git rm .github/workflows/pr304-finalize-threat-model-links.yml
+          git commit -m "docs: wire normative threat model into contributor surfaces"
+          git push origin HEAD:docs/threat-model-232
