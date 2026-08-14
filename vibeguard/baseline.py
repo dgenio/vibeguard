@@ -124,15 +124,15 @@ def record_baselined(
     findings: list[Finding],
     baseline: Baseline,
     *,
-    accepted: bool = True,
+    accepted: bool,
     rejection_reason: str | None = None,
 ) -> list[FindingRecord]:
-    """Return every finding with any matching baseline as a separate disposition.
+    """Return every finding with matching baselines as separate dispositions.
 
     Unlike :func:`filter_baselined`, this function never removes an occurrence.
-    ``accepted=False`` records that a baseline entry was present but was not
-    authoritative (for example because ``integrity`` detected same-change policy
-    weakening); the finding then remains active.
+    The caller must explicitly state whether the governing policy accepted the
+    baseline. ``accepted=False`` leaves the finding active while retaining the
+    attempted disposition as evidence.
     """
     records: list[FindingRecord] = []
     for finding in findings:
