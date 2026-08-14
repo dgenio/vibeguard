@@ -21,6 +21,11 @@ release.
 > ordering — so the document and the binary cannot silently disagree. An
 > *intentional* contract change must update the doc and that suite together.
 
+> Security semantics for Trustworthy Observe are governed by the
+> [normative threat model](threat-model.md). The stability contract must not be
+> read as a stronger claim: a complete run or no findings is not proof that a
+> change is secure.
+
 ---
 
 ## TL;DR

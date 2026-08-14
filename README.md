@@ -9,6 +9,8 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Read the Weaver Stack overview on Towards AI](https://img.shields.io/badge/Read_the_overview-Towards_AI-black?logo=medium&logoColor=white)](https://pub.towardsai.net/the-weaver-stack-one-contract-layer-for-safe-llm-agents-7f733cad5eac)
 
+Security boundary: read the [normative Trustworthy Observe threat model](docs/threat-model.md) for the exact guarantees, non-guarantees, trust assumptions, and residual-risk policy. A complete or no-findings run is **not** a security certification.
+
 ---
 
 ## Add VibeGuard to your PR workflow

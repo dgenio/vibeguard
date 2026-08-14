@@ -25,12 +25,25 @@ larger change, skim:
 - **[docs/stability-contract.md](docs/stability-contract.md)** — the
   promises core rules and outputs carry, so you know what counts as a
   breaking change.
+- **[docs/threat-model.md](docs/threat-model.md)** — the normative security
+  boundaries, guarantees/non-guarantees, trust assumptions, and residual-risk
+  policy for Trustworthy Observe.
 
 Good first contributions: issues labelled `good-first-issue`,
 false-positive reports with a clear repro, and docs. New rules and
 integrations land most easily when they match the **Now / Next** focus in
 the roadmap. Maintainers cutting a release should follow
 [docs/release-checklist.md](docs/release-checklist.md).
+
+### Threat-model review gate
+
+Any change to **scope resolution, policy/configuration, suppressions, baselines,
+plugin trust, execution/completeness status, evidence/report semantics, or CI
+integration/permissions** must review and update the normative
+[threat model](docs/threat-model.md) in the same PR when the security boundary,
+mitigation, residual risk, evidence signal, or review cadence changes. Do not
+merge such a change on the assumption that existing threat-model wording still
+applies; make that review explicit in the PR.
 
 ---
 
