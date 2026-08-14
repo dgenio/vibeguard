@@ -154,14 +154,14 @@ def baseline_record(
     reviewer: str | None = None,
     source_commit: str | None = None,
     config_digest: str | None = None,
-    accepted: bool = True,
+    accepted: bool,
     rejection_reason: str | None = None,
 ) -> FindingRecord:
     """Return *finding* with a separate baseline disposition.
 
-    Authority is never inferred from the mere existence of a baseline entry.
-    Callers must propagate whatever authority evidence was actually recorded;
-    the integrity policy can then decide whether it is sufficient.
+    Authority is never inferred and acceptance is never defaulted. Callers must
+    propagate the authority evidence that actually exists and explicitly state
+    whether the selected policy accepted the disposition.
     """
     disposition = Disposition(
         status=DispositionStatus.BASELINED,
