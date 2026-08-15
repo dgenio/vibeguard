@@ -31,9 +31,7 @@ def test_reasonless_directive_is_not_a_suppression(directive: str) -> None:
         '# vibeguard: ignore SEC-AWSACCESSKEY reason="   "',
     ],
 )
-def test_reasonless_directive_preserves_original_finding(
-    tmp_path: Path, directive: str
-) -> None:
+def test_reasonless_directive_preserves_original_finding(tmp_path: Path, directive: str) -> None:
     source = f'{directive}\nAWS_KEY = "AKIAIOSFODNN7EXAMPLE"\n'
     (tmp_path / "config.py").write_text(source, encoding="utf-8")
 
