@@ -13,7 +13,7 @@ def _text(path: str) -> str:
 # These tests intentionally pin the navigation/review surfaces required by the
 # #232 acceptance criteria so a later docs cleanup cannot silently orphan the
 # normative security contract.
-def test_normative_threat_model_is_linked_from_required_surfaces() -> None:
+def test_threat_model_is_linked_from_required_surfaces() -> None:
     assert "docs/threat-model.md" in _text("README.md")
     assert "docs/threat-model.md" in _text("SECURITY.md")
     assert "threat-model.md" in _text("docs/stability-contract.md")
@@ -21,7 +21,7 @@ def test_normative_threat_model_is_linked_from_required_surfaces() -> None:
 
 
 def test_contributor_guidance_requires_security_boundary_review() -> None:
-    contributing = _text("CONTRIBUTING.md")
+    contributing = " ".join(_text("CONTRIBUTING.md").split())
     for term in (
         "scope resolution",
         "policy/configuration",
@@ -38,4 +38,4 @@ def test_contributor_guidance_requires_security_boundary_review() -> None:
 def test_threat_model_keeps_no_findings_non_certification_boundary() -> None:
     threat_model = _text("docs/threat-model.md").lower()
     assert "no findings does not mean no vulnerabilities" in threat_model
-    assert "does not attempt to prove that code is secure" in threat_model
+    assert "continuation does not certify a change as secure" in threat_model
