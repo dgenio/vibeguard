@@ -10,6 +10,9 @@ def _text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+# These tests intentionally pin the navigation/review surfaces required by the
+# #232 acceptance criteria so a later docs cleanup cannot silently orphan the
+# normative security contract.
 def test_normative_threat_model_is_linked_from_required_surfaces() -> None:
     assert "docs/threat-model.md" in _text("README.md")
     assert "docs/threat-model.md" in _text("SECURITY.md")
