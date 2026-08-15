@@ -28,15 +28,21 @@ _SUPPRESSION_RE = re.compile(
 
 
 def parse_inline_suppressions(content: str) -> dict[int, list[str]]:
-    """Parse inline suppression comments from file content.
+    """Parse valid inline suppression comments from file content.
 
-    Returns a mapping of line_number -> list of suppressed finding IDs.
-    Line numbers are 1-based.
+    Returns a mapping of line_number -> list of suppressed finding IDs. Line
+    numbers are 1-based. A suppression without a non-blank ``reason=`` is not
+    authoritative and is therefore excluded from this map; callers can surface
+    it separately through :func:`find_missing_reasons` without hiding the
+    underlying finding (#132).
     """
     suppressions: dict[int, list[str]] = {}
     for lineno, line in enumerate(content.splitlines(), start=1):
         match = _SUPPRESSION_RE.search(line)
         if match:
+            reason = match.group("reason")
+            if reason is None or not reason.strip():
+                continue
             ids = [fid.strip() for fid in match.group("ids").split(",") if fid.strip()]
             suppressions[lineno] = ids
     return suppressions
